@@ -1,0 +1,1427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CrowderSphere</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico">
+<style>
+:root{
+  --bg:#f4f3f0; --panel:#fbfaf8; --line:#e2dfd9; --ink:#1d1d1f; --muted:#6b6862; --soft:#ece9e3;
+  --accent:#2f5bd3; --accent-ink:#fff; --accent-soft:#e6ecfb; --ok:#1f7a4d; --warn:#a15c00; --bad:#b42318;
+  --paper:#fff; --shadow:0 8px 30px rgba(20,20,30,.14);
+  --text:#222; --quote:#444; --code-bg:#f5f5f3; --placeholder:#aaa; --link:#2f5bd3;
+  --ok-soft:#e1f3ea; --warn-soft:#fbefdc; --editor-font:Georgia,"Times New Roman",serif; --editor-size:18px;
+  color-scheme:light;
+}
+:root[data-theme=dark]{
+  --bg:#141518; --panel:#1b1d21; --line:#2f3238; --ink:#e7e7e9; --muted:#9a9ca4; --soft:#292c32;
+  --accent:#4f74ea; --accent-ink:#fff; --accent-soft:#263252; --ok:#4cc38a; --warn:#e5a540; --bad:#ff6b5e;
+  --paper:#1f2125; --shadow:0 8px 30px rgba(0,0,0,.5);
+  --text:#e4e4e6; --quote:#c3c3c8; --code-bg:#2a2c31; --placeholder:#666a72; --link:#8ea8ff;
+  --ok-soft:#1b3428; --warn-soft:#3b2d16;
+  color-scheme:dark;
+}
+:root[data-theme=dark] #imgbar{border:1px solid #3a3e47}
+:root[data-theme=dark] #editor figure img{filter:brightness(.95)}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:14px/1.45 "Segoe UI",system-ui,sans-serif;color:var(--ink);background:var(--bg);overflow:hidden}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--line);background:var(--paper);border-radius:7px;padding:6px 12px}
+button:hover{background:var(--soft)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+button.primary:hover{filter:brightness(1.08)}
+button.danger{color:var(--bad)}
+button.ghost{border-color:transparent;background:transparent}
+button.ghost:hover{background:var(--soft)}
+button:disabled{opacity:.5;cursor:default}
+input[type=text],input[type=url],input[type=password],input[type=number],textarea,select{border:1px solid var(--line);border-radius:7px;padding:7px 9px;background:var(--paper);width:100%}
+input:focus,textarea:focus,select:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+label.field{display:block;margin:0 0 12px}
+label.field>span{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.03em}
+.hint{font-size:12px;color:var(--muted);margin-top:4px}
+
+#app{display:grid;grid-template-columns:clamp(200px,17vw,280px) minmax(0,1fr) auto;height:100vh}
+
+/* sidebar */
+#sidebar{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.brand{padding:16px 16px 10px;font-weight:700;font-size:16px;display:flex;align-items:center;gap:8px}
+.brand svg{width:20px;height:20px;color:var(--accent)}
+#newPost{margin:0 14px 10px}
+#search{margin:0 14px 8px;width:auto}
+#postList{flex:1;overflow:auto;padding:4px 8px}
+.post-item{padding:9px 10px;border-radius:8px;cursor:pointer;margin-bottom:2px}
+.post-item:hover{background:var(--soft)}
+.post-item.active{background:var(--accent-soft)}
+.post-item .t{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.post-item .m{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center;margin-top:2px}
+.badge{font-size:11px;padding:1px 7px;border-radius:99px;background:var(--soft);color:var(--muted);font-weight:600}
+.badge.publish{background:var(--ok-soft);color:var(--ok)}
+.badge.draft,.badge.pending{background:var(--warn-soft);color:var(--warn)}
+.badge.changed{background:var(--accent-soft);color:var(--accent)}
+.empty-list{color:var(--muted);padding:16px 10px;font-size:13px}
+.side-foot{border-top:1px solid var(--line);padding:10px;display:flex;gap:6px}
+.side-foot button{flex:1;font-size:13px}
+
+/* main */
+#main{display:flex;flex-direction:column;min-width:0;min-height:0}
+#topbar{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+#title{flex:1;min-width:120px;font-size:20px;font-weight:700;border:none;background:transparent;padding:6px 4px;font-family:var(--editor-font)}
+#title:focus{outline:none;border:none;background:var(--paper);border-radius:6px}
+#saveState{font-size:12px;color:var(--muted);white-space:nowrap;min-width:110px;text-align:right}
+#saveState.err{color:var(--bad);font-weight:600}
+
+#toolbar{display:flex;flex-wrap:wrap;gap:2px;align-items:center;padding:6px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+#toolbar .sep{width:1px;height:22px;background:var(--line);margin:0 3px}
+#toolbar button{border:none;background:transparent;padding:4px;border-radius:6px;min-width:28px;height:32px;display:inline-flex;align-items:center;justify-content:center}
+#toolbar button:hover{background:var(--soft)}
+#toolbar button.on{background:var(--accent-soft);color:var(--accent)}
+#toolbar svg{width:18px;height:18px}
+#toolbar select{width:auto;padding:4px 6px;height:32px}
+#toolbar .txt{font-weight:700;font-family:Georgia,serif;font-size:16px}
+#toolbar.source-mode button:not(#btnSource),#toolbar.source-mode select{opacity:.35;pointer-events:none}
+
+#editorWrap{flex:1;overflow:auto;background:var(--bg);padding:clamp(12px,2vw,28px) clamp(10px,2.2vw,32px) 80px;position:relative}
+#editor,#source{max-width:var(--page-width,none);margin:0 auto;background:var(--paper);min-height:100%;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+#editor{zoom:var(--zoom,1);padding:clamp(24px,3.5vw,48px) clamp(20px,5vw,80px);outline:none;font-family:var(--editor-font);font-size:var(--editor-size);line-height:1.7;color:var(--text)}
+#editor::after{content:"";display:block;clear:both}
+#editor:empty::before,#editor.is-empty::before{content:"Start writing your post...";color:var(--placeholder);position:absolute}
+#source{zoom:var(--zoom,1);display:block;width:100%;padding:24px;font:13px/1.55 Consolas,"Cascadia Mono",monospace;border:none;resize:none;min-height:70vh;color:var(--text)}
+#editor h2{font-size:1.6em;line-height:1.25;margin:1.2em 0 .5em}
+#editor h3{font-size:1.3em;margin:1.1em 0 .4em}
+#editor h4{font-size:1.1em;margin:1em 0 .4em}
+#editor p{margin:0 0 1em}
+#editor blockquote{margin:1em 0;padding:.2em 1.2em;border-left:4px solid var(--accent);color:var(--quote);font-style:italic}
+#editor pre{background:var(--code-bg);padding:12px 14px;border-radius:6px;font:14px/1.5 Consolas,monospace;white-space:pre-wrap}
+#editor a{color:var(--link)}
+#editor hr{border:none;border-top:2px solid var(--line);margin:2em 0}
+#editor ul,#editor ol{padding-left:1.6em;margin:0 0 1em}
+#editor table{border-collapse:collapse;margin:1em 0}
+#editor td,#editor th{border:1px solid var(--line);padding:4px 8px}
+#editor img{max-width:100%;height:auto}
+
+/* images (WordPress alignment classes) */
+#editor figure{margin:.4em 0 1em;position:relative;cursor:pointer;user-select:none}
+#editor figure img{display:block;width:100%;height:auto;border-radius:2px}
+#editor figure figcaption{font:13px/1.4 "Segoe UI",sans-serif;color:var(--muted);text-align:center;margin-top:6px}
+#editor figure.alignleft{float:left;margin:.3em 1.4em 1em 0}
+#editor figure.alignright{float:right;margin:.3em 0 1em 1.4em}
+#editor figure.aligncenter{margin-left:auto;margin-right:auto;clear:both}
+#editor figure.alignnone{clear:both}
+#editor figure:hover{outline:2px dashed #b9c6ee;outline-offset:3px}
+#editor figure.is-selected{outline:3px solid var(--accent);outline-offset:3px}
+#editor figure.is-featured::before{content:"\2605 Featured";position:absolute;top:8px;left:8px;background:rgba(0,0,0,.65);color:#fff;font:600 11px "Segoe UI",sans-serif;padding:2px 8px;border-radius:99px;z-index:1}
+
+#statusbar{display:flex;justify-content:space-between;gap:12px;padding:5px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);background:var(--panel)}
+#statusbar span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#statusbar{align-items:center}
+#folderInfo{flex:1;text-align:right;min-width:0}
+.zoomctl{display:inline-flex;align-items:center;gap:2px;flex:none;overflow:visible!important}
+.zoomctl button{border:none;background:transparent;padding:0 6px;height:20px;font-size:13px;line-height:1;color:var(--muted);border-radius:5px}
+.zoomctl button:hover{background:var(--soft);color:var(--ink)}
+.zoomctl #zoomReset{min-width:48px;font-size:12px;font-variant-numeric:tabular-nums}
+#source[hidden],#editor[hidden]{display:none!important}
+#topbar button{white-space:nowrap}
+#panelClose{display:none;float:right;margin:-6px -6px 0 0;font-size:13px;padding:3px 8px}
+@media (max-width:1000px){
+  #panel{position:fixed;right:0;top:0;bottom:0;z-index:40;box-shadow:var(--shadow)}
+  #panelClose{display:block}
+  #folderInfo{display:none}
+}
+
+/* right panel */
+#panel{width:clamp(250px,19vw,320px);background:var(--panel);border-left:1px solid var(--line);overflow:auto;padding:16px}
+#panel.hidden{display:none}
+#panel h3{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:18px 0 8px}
+#panel h3:first-child{margin-top:0}
+#catList{max-height:200px;overflow:auto;border:1px solid var(--line);border-radius:7px;background:var(--paper);padding:6px 8px}
+#catList label{display:flex;gap:8px;align-items:center;padding:2px 0;cursor:pointer}
+#catList .child{padding-left:18px}
+.row{display:flex;gap:6px;align-items:center}
+.row>input{flex:1}
+#featuredBox{border:1px dashed var(--line);border-radius:8px;padding:8px;text-align:center;font-size:12px;color:var(--muted);background:var(--paper)}
+#featuredBox img{width:100%;border-radius:4px;display:block;margin-bottom:6px}
+#featuredBox.dragover{border-color:var(--accent);background:var(--accent-soft)}
+#featuredBox .fb-btns{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:6px}
+#featuredBox .fb-btns button{font-size:12px;padding:4px 10px}
+#featuredBox .fb-note{margin:4px 0 2px}
+.wp-status{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:10px;font-size:13px}
+.wp-status a{color:var(--link);cursor:pointer;text-decoration:underline}
+.small-btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.small-btns button{font-size:12px;padding:4px 9px}
+
+/* floating image toolbar */
+#imgbar{position:fixed;z-index:50;background:#1f2330;color:#fff;border-radius:10px;padding:5px;display:flex;gap:2px;align-items:center;box-shadow:var(--shadow);flex-wrap:nowrap}
+#imgbar[hidden]{display:none}
+#imgbar button{background:transparent;border:none;color:#fff;padding:5px 8px;border-radius:6px;font-size:12px;height:30px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+#imgbar button:hover{background:rgba(255,255,255,.14)}
+#imgbar button.on{background:rgba(255,255,255,.24)}
+#imgbar svg{width:16px;height:16px}
+#imgbar .sep{width:1px;height:20px;background:rgba(255,255,255,.2);margin:0 4px}
+#imgbar input[type=range]{width:90px;accent-color:#8fa8ff}
+#imgbar .wlabel{font-size:11px;width:34px;text-align:right;opacity:.8}
+
+/* modal + toasts */
+#modalBack{position:fixed;inset:0;background:rgba(20,20,30,.38);display:flex;align-items:center;justify-content:center;z-index:100}
+#modalBack[hidden]{display:none}
+.modal{background:var(--paper);border-radius:12px;box-shadow:var(--shadow);width:min(560px,92vw);max-height:90vh;display:flex;flex-direction:column}
+.modal.wide{width:min(980px,95vw);height:90vh}
+.modal header{padding:16px 20px 0;font-size:17px;font-weight:700}
+.modal .body{padding:14px 20px;overflow:auto;flex:1}
+.modal footer{padding:12px 20px 16px;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid var(--line)}
+.modal iframe{width:100%;height:100%;border:1px solid var(--line);border-radius:8px;background:#fff}
+.radio{display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;cursor:pointer}
+.radio:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.radio b{display:block}
+.radio small{color:var(--muted)}
+.check-list{margin:10px 0 0;padding:0;list-style:none;font-size:13px}
+.check-list li{padding:2px 0}
+.check-list .warn{color:var(--warn)}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.result-ok{color:var(--ok);font-weight:600}
+.result-bad{color:var(--bad);font-weight:600}
+ol.steps{padding-left:20px;margin:6px 0;font-size:13px;color:var(--muted)}
+#toasts{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;z-index:200;align-items:center}
+.toast{background:#1f2330;color:#fff;padding:9px 16px;border-radius:9px;box-shadow:var(--shadow);font-size:13px;max-width:70vw}
+.toast.error{background:var(--bad)}
+.toast.ok{background:var(--ok)}
+#toolbar select#fontPick{width:122px}
+#toolbar select#blockType{width:112px}
+.side-foot #themeBtn{flex:0 0 38px;padding:6px 0}
+.side-foot #themeBtn svg{width:16px;height:16px;vertical-align:-3px}
+#wordCount{cursor:pointer}
+#wordCount:hover{color:var(--ink);text-decoration:underline}
+#selCount{color:var(--accent);font-weight:600}
+.prefs-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+.section-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:18px 0 10px;border-top:1px solid var(--line);padding-top:14px}
+.stats{width:100%;border-collapse:collapse;font-size:14px}
+.stats td{padding:6px 4px;border-bottom:1px solid var(--line)}
+.stats td:last-child{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+#dropHint{position:absolute;inset:10px;border:3px dashed var(--accent);border-radius:14px;background:rgba(47,91,211,.07);display:none;align-items:center;justify-content:center;font-size:18px;color:var(--accent);font-weight:600;pointer-events:none;z-index:5}
+#editorWrap.dragging #dropHint{display:flex}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-ul" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4.5" cy="6" r="1" fill="currentColor"/><circle cx="4.5" cy="12" r="1" fill="currentColor"/><circle cx="4.5" cy="18" r="1" fill="currentColor"/></symbol>
+    <symbol id="i-ol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="10" y1="6" x2="20" y2="6"/><line x1="10" y1="12" x2="20" y2="12"/><line x1="10" y1="18" x2="20" y2="18"/><path d="M4 4.5h1.5V9M4 9h3M4 14.5c.5-.8 2.8-.9 2.8.6 0 1-2.8 2-2.8 3.4h3" stroke-width="1.5"/></symbol>
+    <symbol id="i-quote" viewBox="0 0 24 24" fill="currentColor"><path d="M7 7c-2.2 0-4 1.8-4 4v6h6v-6H5.5c0-1 .7-2 1.5-2zm10 0c-2.2 0-4 1.8-4 4v6h6v-6h-3.5c0-1 .7-2 1.5-2z"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></symbol>
+    <symbol id="i-unlink" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14.5 6.5l1-1a4.5 4.5 0 0 1 6.4 6.4l-1 1M9.5 17.5l-1 1a4.5 4.5 0 0 1-6.4-6.4l1-1"/><line x1="4" y1="4" x2="20" y2="20"/></symbol>
+    <symbol id="i-al" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="10" x2="14" y2="10"/><line x1="4" y1="14" x2="20" y2="14"/><line x1="4" y1="18" x2="14" y2="18"/></symbol>
+    <symbol id="i-ac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="10" x2="17" y2="10"/><line x1="4" y1="14" x2="20" y2="14"/><line x1="7" y1="18" x2="17" y2="18"/></symbol>
+    <symbol id="i-ar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="10" y1="10" x2="20" y2="10"/><line x1="4" y1="14" x2="20" y2="14"/><line x1="10" y1="18" x2="20" y2="18"/></symbol>
+    <symbol id="i-img" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></symbol>
+    <symbol id="i-hr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="7" y1="7" x2="17" y2="7" opacity=".35"/><line x1="7" y1="17" x2="17" y2="17" opacity=".35"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+    <symbol id="i-redo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></symbol>
+    <symbol id="i-clear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 5h12M12 5l-3 14"/><line x1="14" y1="14" x2="20" y2="20"/><line x1="20" y1="14" x2="14" y2="20"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/></symbol>
+    <symbol id="i-panel" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="15" y1="4" x2="15" y2="20"/></symbol>
+    <symbol id="i-pen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
+    <symbol id="i-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="9" height="8" rx="1"/><line x1="15" y1="6" x2="21" y2="6"/><line x1="15" y1="11" x2="21" y2="11"/><line x1="3" y1="17" x2="21" y2="17"/></symbol>
+    <symbol id="i-center" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="6" y="4" width="12" height="10" rx="1"/><line x1="3" y1="18" x2="21" y2="18"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="12" y="5" width="9" height="8" rx="1"/><line x1="3" y1="6" x2="9" y2="6"/><line x1="3" y1="11" x2="9" y2="11"/><line x1="3" y1="17" x2="21" y2="17"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M6 13l6 6 6-6"/></symbol>
+    <symbol id="i-spell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15l3.5-9 3.5 9M4.3 12h4.4"/><path d="M12 6v9h2.6a2.2 2.2 0 0 0 0-4.5H12M14.4 10.5a2.2 2.2 0 0 0 0-4.5H12"/><path d="M14 19l2.5 2.5L22 16"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+  </defs>
+</svg>
+
+<div id="app">
+  <aside id="sidebar">
+    <div class="brand"><img src="/favicon.ico" alt="" width="24" height="24" style="border-radius:6px">CrowderSphere</div>
+    <button id="newPost" class="primary">+ New post</button>
+    <input id="search" type="text" placeholder="Search posts">
+    <div id="postList"></div>
+    <div class="side-foot">
+      <button id="openRoot" title="Open the folder where posts are stored">Folder</button>
+      <button id="openSettings">Settings</button>
+      <button id="themeBtn" title="Switch light / dark"><svg><use href="#i-moon"/></svg></button>
+    </div>
+  </aside>
+
+  <main id="main">
+    <header id="topbar">
+      <input id="title" type="text" placeholder="Post title" autocomplete="off">
+      <span id="saveState"></span>
+      <button id="previewBtn">Preview</button>
+      <button id="exportBtn" title="Save this post as a Word document (.docx) in its folder">Export to Word</button>
+      <button id="publishBtn" class="primary">Send to WordPress</button>
+      <button id="togglePanel" class="ghost" title="Show/hide post settings"><svg width="18" height="18"><use href="#i-panel"/></svg></button>
+    </header>
+
+    <div id="toolbar">
+      <select id="blockType" title="Paragraph style">
+        <option value="p">Paragraph</option>
+        <option value="h2">Heading 2</option>
+        <option value="h3">Heading 3</option>
+        <option value="h4">Heading 4</option>
+        <option value="blockquote">Quote</option>
+        <option value="pre">Code block</option>
+      </select>
+      <select id="fontPick" title="Font for selected text">
+        <option value="">Default font</option>
+      </select>
+      <span class="sep"></span>
+      <button data-cmd="bold" title="Bold (Ctrl+B)"><span class="txt">B</span></button>
+      <button data-cmd="italic" title="Italic (Ctrl+I)"><span class="txt" style="font-style:italic">I</span></button>
+      <button data-cmd="underline" title="Underline (Ctrl+U)"><span class="txt" style="text-decoration:underline">U</span></button>
+      <button data-cmd="strikeThrough" title="Strikethrough"><span class="txt" style="text-decoration:line-through">S</span></button>
+      <span class="sep"></span>
+      <button data-cmd="insertUnorderedList" title="Bulleted list"><svg><use href="#i-ul"/></svg></button>
+      <button data-cmd="insertOrderedList" title="Numbered list"><svg><use href="#i-ol"/></svg></button>
+      <button data-act="quote" title="Quote"><svg><use href="#i-quote"/></svg></button>
+      <span class="sep"></span>
+      <button data-cmd="justifyLeft" title="Align left"><svg><use href="#i-al"/></svg></button>
+      <button data-cmd="justifyCenter" title="Align center"><svg><use href="#i-ac"/></svg></button>
+      <button data-cmd="justifyRight" title="Align right"><svg><use href="#i-ar"/></svg></button>
+      <span class="sep"></span>
+      <button data-act="link" title="Insert link (Ctrl+K)"><svg><use href="#i-link"/></svg></button>
+      <button data-cmd="unlink" title="Remove link"><svg><use href="#i-unlink"/></svg></button>
+      <button data-act="image" title="Insert picture"><svg><use href="#i-img"/></svg></button>
+      <button data-act="hr" title="Divider line"><svg><use href="#i-hr"/></svg></button>
+      <span class="sep"></span>
+      <button data-cmd="removeFormat" title="Clear formatting"><svg><use href="#i-clear"/></svg></button>
+      <button data-cmd="undo" title="Undo (Ctrl+Z)"><svg><use href="#i-undo"/></svg></button>
+      <button data-cmd="redo" title="Redo (Ctrl+Y)"><svg><use href="#i-redo"/></svg></button>
+      <span class="sep"></span>
+      <button id="btnSpell" data-act="spell" title="Check spelling as you type (right-click a word for suggestions)"><svg><use href="#i-spell"/></svg></button>
+      <button id="btnSource" data-act="source" title="Edit HTML"><svg><use href="#i-code"/></svg></button>
+    </div>
+
+    <div id="editorWrap">
+      <div id="dropHint">Drop pictures to add them to the post</div>
+      <div id="editor" contenteditable="true" spellcheck="true"></div>
+      <textarea id="source" spellcheck="false" hidden></textarea>
+    </div>
+    <footer id="statusbar"><span><span id="wordCount" title="Click for full statistics">0 words</span> <span id="selCount"></span></span><span id="folderInfo"></span>
+      <span class="zoomctl" title="Zoom the text (Ctrl + mouse wheel, Ctrl + / Ctrl - / Ctrl 0)"><button id="zoomOut" aria-label="Zoom out">&minus;</button><button id="zoomReset" title="Back to 100%">100%</button><button id="zoomIn" aria-label="Zoom in">+</button></span></footer>
+  </main>
+
+  <aside id="panel">
+    <button id="panelClose" class="ghost" title="Hide post settings">&times; Close</button>
+    <h3>Excerpt</h3>
+    <textarea id="excerpt" rows="3" placeholder="Optional short summary"></textarea>
+
+    <h3>Categories</h3>
+    <div id="catList"><div class="hint">Connect to WordPress in Settings to load categories.</div></div>
+    <div class="row" style="margin-top:6px">
+      <input id="newCat" type="text" placeholder="New category">
+      <button id="addCat">Add</button>
+    </div>
+    <div class="small-btns"><button id="reloadCats">Reload from WordPress</button></div>
+
+    <h3>Tags</h3>
+    <input id="tags" type="text" placeholder="travel, hiking, utah">
+    <div class="hint">Separate with commas. New tags are created when you send the post.</div>
+
+    <h3>Featured image</h3>
+    <div id="featuredBox"></div>
+
+    <h3>WordPress</h3>
+    <div id="wpStatus" class="wp-status"></div>
+
+    <h3>On this computer</h3>
+    <div class="wp-status">
+      <div id="localInfo" style="word-break:break-all"></div>
+      <div class="small-btns">
+        <button id="showFolder">Show in folder</button>
+        <button id="deletePost" class="danger">Delete post</button>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<div id="imgbar" hidden>
+  <button data-img="alignleft" title="Float left, text wraps"><svg><use href="#i-left"/></svg></button>
+  <button data-img="aligncenter" title="Centered"><svg><use href="#i-center"/></svg></button>
+  <button data-img="alignright" title="Float right, text wraps"><svg><use href="#i-right"/></svg></button>
+  <span class="sep"></span>
+  <button data-w="25">S</button><button data-w="50">M</button><button data-w="75">L</button><button data-w="100">Full</button>
+  <input id="imgWidth" type="range" min="10" max="100" step="1" title="Width">
+  <span class="wlabel" id="imgWidthLabel"></span>
+  <span class="sep"></span>
+  <button data-img="details" title="Alt text and caption">Caption / alt</button>
+  <button data-img="featured" title="Use as the post's featured image">&#9733; Featured</button>
+  <span class="sep"></span>
+  <button data-img="up" title="Move up"><svg><use href="#i-up"/></svg></button>
+  <button data-img="down" title="Move down"><svg><use href="#i-down"/></svg></button>
+  <button data-img="delete" title="Remove picture"><svg><use href="#i-trash"/></svg></button>
+</div>
+
+<div id="modalBack" hidden></div>
+<div id="toasts"></div>
+<input id="filePick" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden>
+<input id="featuredPick" type="file" accept="image/jpeg,image/png,image/gif,image/webp" hidden>
+
+<script src="/docx.js"></script>
+<script>
+"use strict";
+const TOKEN = "__API_TOKEN__";
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const editor = $('#editor'), source = $('#source'), titleEl = $('#title');
+
+const state = {
+  posts: [], postsDir: '', current: null, dirty: false, saving: null, pendingSave: false,
+  settings: null, categories: null, selFig: null, sourceMode: false, savedRange: null
+};
+
+/* ------------------------------------------------------------------ preferences (theme, fonts, spelling) */
+const FONTS = [
+  ['Georgia', 'Georgia, "Times New Roman", serif'],
+  ['Cambria', 'Cambria, Georgia, serif'],
+  ['Times New Roman', '"Times New Roman", Times, serif'],
+  ['Palatino', '"Palatino Linotype", "Book Antiqua", Palatino, serif'],
+  ['Garamond', 'Garamond, "EB Garamond", Georgia, serif'],
+  ['Segoe UI', '"Segoe UI", system-ui, sans-serif'],
+  ['Calibri', 'Calibri, Carlito, "Segoe UI", sans-serif'],
+  ['Arial', 'Arial, Helvetica, sans-serif'],
+  ['Verdana', 'Verdana, Geneva, sans-serif'],
+  ['Trebuchet MS', '"Trebuchet MS", Helvetica, sans-serif'],
+  ['Courier New', '"Courier New", Courier, monospace'],
+  ['Consolas', 'Consolas, "Courier New", monospace']
+];
+const DEFAULT_PREFS = { theme: 'light', font: 'Georgia', fontSize: 18, spellcheck: true, exportFont: true, zoom: 1, pageWidth: 'fill' };
+const PAGE_WIDTHS = { fill: 'none', wide: '1100px', reading: '780px' };
+let prefs = Object.assign({}, DEFAULT_PREFS, (() => { try { return JSON.parse(localStorage.getItem('bw-prefs') || '{}'); } catch (e) { return {}; } })());
+const darkMQ = matchMedia('(prefers-color-scheme: dark)');
+function fontStack(name) { const f = FONTS.find(f => f[0] === name); return f ? f[1] : FONTS[0][1]; }
+function firstFamily(stack) { return String(stack || '').split(',')[0].replace(/["']/g, '').trim(); }
+function isDark() { return prefs.theme === 'dark' || (prefs.theme === 'system' && darkMQ.matches); }
+function applyPrefs() {
+  const root = document.documentElement;
+  root.dataset.theme = isDark() ? 'dark' : 'light';
+  root.style.setProperty('--editor-font', fontStack(prefs.font));
+  root.style.setProperty('--editor-size', (+prefs.fontSize || 18) + 'px');
+  root.style.setProperty('--zoom', String(+prefs.zoom || 1));
+  root.style.setProperty('--page-width', PAGE_WIDTHS[prefs.pageWidth] || 'none');
+  const zr = $('#zoomReset'); if (zr) zr.textContent = Math.round((+prefs.zoom || 1) * 100) + '%';
+  if (typeof positionImgbar === 'function') requestAnimationFrame(positionImgbar);
+  for (const el of [editor, titleEl, $('#excerpt'), $('#tags')]) el.spellcheck = !!prefs.spellcheck;
+  $('#btnSpell').classList.toggle('on', !!prefs.spellcheck);
+  $('#themeBtn use').setAttribute('href', isDark() ? '#i-sun' : '#i-moon');
+  $('#themeBtn').title = isDark() ? 'Switch to light mode' : 'Switch to dark mode';
+}
+function cachePrefs() { try { localStorage.setItem('bw-prefs', JSON.stringify(prefs)); } catch (e) {} }
+async function savePrefs(change) {
+  prefs = Object.assign({}, prefs, change);
+  cachePrefs(); applyPrefs();
+  try { state.settings = await api('/api/settings', { json: { prefs } }); }
+  catch (e) { toast('Couldn\'t save that setting: ' + e.message, 'error'); }
+}
+darkMQ.addEventListener('change', () => { if (prefs.theme === 'system') applyPrefs(); });
+let zoomSaveTimer = null, wheelAcc = 0;
+function setZoom(z) {
+  z = Math.min(2.5, Math.max(0.5, Math.round(z * 10) / 10));
+  if (z === prefs.zoom) return;
+  prefs.zoom = z; cachePrefs(); applyPrefs();
+  clearTimeout(zoomSaveTimer);
+  zoomSaveTimer = setTimeout(() => savePrefs({ zoom: prefs.zoom }), 700);
+}
+$('#zoomIn').addEventListener('click', () => setZoom((+prefs.zoom || 1) + 0.1));
+$('#zoomOut').addEventListener('click', () => setZoom((+prefs.zoom || 1) - 0.1));
+$('#zoomReset').addEventListener('click', () => setZoom(1));
+$('#editorWrap').addEventListener('wheel', e => {
+  if (!e.ctrlKey) return;
+  e.preventDefault();
+  wheelAcc += e.deltaY;
+  if (Math.abs(wheelAcc) >= 40) { setZoom((+prefs.zoom || 1) + (wheelAcc < 0 ? 0.1 : -0.1)); wheelAcc = 0; }
+}, { passive: false });
+document.addEventListener('keydown', e => {
+  if (!e.ctrlKey || e.altKey || e.metaKey) return;
+  if (e.key === '=' || e.key === '+' || e.code === 'NumpadAdd') { e.preventDefault(); setZoom((+prefs.zoom || 1) + 0.1); }
+  else if (e.key === '-' || e.code === 'NumpadSubtract') { e.preventDefault(); setZoom((+prefs.zoom || 1) - 0.1); }
+  else if (e.key === '0' || e.code === 'Numpad0') { e.preventDefault(); setZoom(1); }
+});
+applyPrefs();
+
+/* ------------------------------------------------------------------ utils */
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso); if (isNaN(d)) return iso;
+  const today = new Date();
+  if (d.toDateString() === today.toDateString()) return 'Today ' + d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
+  return d.toLocaleDateString([], {month:'short', day:'numeric', year: d.getFullYear() === today.getFullYear() ? undefined : 'numeric'});
+}
+function toast(msg, kind = '') {
+  const t = document.createElement('div');
+  t.className = 'toast ' + kind; t.textContent = msg;
+  $('#toasts').appendChild(t);
+  setTimeout(() => t.remove(), kind === 'error' ? 7000 : 3200);
+}
+async function api(path, opts = {}) {
+  const init = { method: opts.method || (opts.json !== undefined || opts.body !== undefined ? 'POST' : 'GET'), headers: { 'X-Token': TOKEN } };
+  if (opts.json !== undefined) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(opts.json); }
+  else if (opts.body !== undefined) init.body = opts.body;
+  if (opts.keepalive) init.keepalive = true;
+  let res;
+  try { res = await fetch(path, init); }
+  catch (e) { throw new Error('CrowderSphere\'s background service isn\'t responding. Close this window and start CrowderSphere again.'); }
+  let data = {};
+  try { data = await res.json(); } catch (e) {}
+  if (!res.ok || (data && data.error)) throw new Error((data && data.error) || ('Request failed (HTTP ' + res.status + ')'));
+  return data;
+}
+function blankMeta() { return { title:'', excerpt:'', categories:[], tags:'', featured:'', wpId:null, wpLink:'', wpStatus:'', published:'', modified:'', created:'', media:{} }; }
+function fileUrl(rel) { return '/files/' + encodeURIComponent(state.current.id) + '/' + rel; }
+
+/* ------------------------------------------------------------------ modal */
+function openModal({ title, body, buttons = [], wide = false, onOpen, onClose }) {
+  const back = $('#modalBack');
+  back.innerHTML = '';
+  const m = document.createElement('div');
+  m.className = 'modal' + (wide ? ' wide' : '');
+  m.innerHTML = `<header>${esc(title)}</header><div class="body"></div><footer></footer>`;
+  const b = $('.body', m);
+  if (typeof body === 'string') b.innerHTML = body; else if (body) b.appendChild(body);
+  const close = () => { back.hidden = true; back.innerHTML = ''; document.removeEventListener('keydown', onKey); if (onClose) onClose(); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  for (const btn of buttons) {
+    const el = document.createElement('button');
+    el.textContent = btn.label;
+    if (btn.primary) el.className = 'primary';
+    if (btn.danger) el.className = 'danger';
+    if (btn.id) el.id = btn.id;
+    el.onclick = async () => { if (btn.action) { const r = await btn.action(m, el); if (r === false) return; } close(); };
+    $('footer', m).appendChild(el);
+  }
+  back.appendChild(m); back.hidden = false;
+  document.addEventListener('keydown', onKey);
+  back.onmousedown = e => { if (e.target === back) close(); };
+  if (onOpen) onOpen(m);
+  const first = $('input:not([type=radio]):not([type=checkbox]),textarea', m); if (first) first.focus();
+  return { el: m, close };
+}
+function ask(title, fields, okLabel = 'OK') {
+  return new Promise(resolve => {
+    const body = fields.map((f, i) => f.type === 'checkbox'
+      ? `<label class="field" style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-i="${i}" ${f.value ? 'checked' : ''}> ${esc(f.label)}</label>`
+      : `<label class="field"><span>${esc(f.label)}</span>${f.multiline ? `<textarea data-i="${i}" rows="3">${esc(f.value || '')}</textarea>` : `<input type="text" data-i="${i}" value="${esc(f.value || '')}" placeholder="${esc(f.placeholder || '')}">`}${f.hint ? `<div class="hint">${esc(f.hint)}</div>` : ''}</label>`).join('');
+    let done = false;
+    const m = openModal({ title, body, buttons: [
+      { label: 'Cancel', action: () => { done = true; resolve(null); } },
+      { label: okLabel, primary: true, action: (el) => { done = true; resolve(fields.map((f, i) => { const inp = $(`[data-i="${i}"]`, el); return f.type === 'checkbox' ? inp.checked : inp.value; })); } }
+    ]});
+    $$('input[type=text]', m.el).forEach(inp => inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('footer button.primary', m.el).click(); } }));
+    const obs = new MutationObserver(() => { if ($('#modalBack').hidden && !done) { done = true; resolve(null); obs.disconnect(); } });
+    obs.observe($('#modalBack'), { attributes: true });
+  });
+}
+
+/* ------------------------------------------------------------------ posts list */
+async function refreshList() {
+  const r = await api('/api/posts');
+  state.posts = r.posts || []; state.postsDir = r.postsDir;
+  renderList();
+}
+function statusBadge(p) {
+  if (!p.wpStatus) return '<span class="badge">Local only</span>';
+  const label = { publish: 'Published', draft: 'WP draft', pending: 'Pending', private: 'Private', future: 'Scheduled' }[p.wpStatus] || p.wpStatus;
+  let h = `<span class="badge ${esc(p.wpStatus)}">${esc(label)}</span>`;
+  if (p.published && p.modified && p.modified > p.published) h += '<span class="badge changed">Edited</span>';
+  return h;
+}
+function renderList() {
+  const q = $('#search').value.trim().toLowerCase();
+  const list = $('#postList');
+  const items = state.posts.filter(p => !q || (p.title || '').toLowerCase().includes(q));
+  if (!state.posts.length) { list.innerHTML = '<div class="empty-list">No posts yet. Click <b>New post</b> to start writing.</div>'; return; }
+  if (!items.length) { list.innerHTML = '<div class="empty-list">No posts match.</div>'; return; }
+  list.innerHTML = items.map(p => `<div class="post-item ${state.current && state.current.id === p.id ? 'active' : ''}" data-id="${esc(p.id)}">
+      <div class="t">${esc(p.title || 'Untitled')}</div>
+      <div class="m">${fmtDate(p.modified)} ${statusBadge(p)}</div></div>`).join('');
+}
+$('#postList').addEventListener('click', e => { const it = e.target.closest('.post-item'); if (it) openPost(it.dataset.id); });
+$('#search').addEventListener('input', renderList);
+
+/* ------------------------------------------------------------------ loading & saving */
+async function openPost(id) {
+  if (state.current && state.current.id === id) return;
+  await flushSave();
+  try {
+    const r = await api('/api/post?id=' + encodeURIComponent(id));
+    state.current = { id: r.id, meta: Object.assign(blankMeta(), r.meta) };
+    if (!Array.isArray(state.current.meta.categories)) state.current.meta.categories = state.current.meta.categories == null ? [] : [state.current.meta.categories];
+    loadIntoEditor(r.html);
+    afterLoad();
+  } catch (e) { toast(e.message, 'error'); }
+}
+async function newPost() {
+  await flushSave();
+  state.current = { id: null, meta: blankMeta() };
+  loadIntoEditor('');
+  afterLoad();
+  titleEl.focus();
+}
+function afterLoad() {
+  if (state.sourceMode) toggleSource(false);
+  titleEl.value = state.current.meta.title || '';
+  state.dirty = false;
+  setSaveState(state.current.id ? 'Saved' : 'New post');
+  renderPanel(); renderList(); updateWordCount(); deselectFig();
+  editorWrapScrollTop();
+}
+function editorWrapScrollTop() { $('#editorWrap').scrollTop = 0; }
+
+function loadIntoEditor(html) {
+  editor.innerHTML = html && html.trim() ? html : '<p><br></p>';
+  for (const img of $$('img', editor)) {
+    const s = img.getAttribute('src') || '';
+    if (/^images\//.test(s) && state.current.id) img.setAttribute('src', fileUrl(s));
+  }
+  for (const f of $$('figure', editor)) f.setAttribute('contenteditable', 'false');
+  markFeatured();
+  updateEmpty();
+}
+function serializeEditor() {
+  const clone = editor.cloneNode(true);
+  for (const img of $$('img', clone)) {
+    const m = (img.getAttribute('src') || '').match(/^\/files\/[^/]+\/(images\/[^?#]+)$/);
+    if (m) img.setAttribute('src', decodeURIComponent(m[1]));
+  }
+  for (const el of $$('[contenteditable]', clone)) el.removeAttribute('contenteditable');
+  for (const el of $$('.is-selected,.is-featured', clone)) { el.classList.remove('is-selected', 'is-featured'); if (!el.className) el.removeAttribute('class'); }
+  const BLOCK = /^(P|H[1-6]|UL|OL|BLOCKQUOTE|PRE|FIGURE|HR|TABLE)$/;
+  const out = []; let inline = '';
+  const flush = () => { if (inline.replace(/<br>/g, '').trim()) out.push('<p>' + inline.trim() + '</p>'); inline = ''; };
+  for (const n of clone.childNodes) {
+    if (n.nodeType === 1 && BLOCK.test(n.nodeName)) { flush(); out.push(n.outerHTML); }
+    else if (n.nodeType === 1 && n.nodeName === 'DIV') { flush(); if (n.innerHTML.replace(/<br>/g, '').trim()) out.push('<p>' + n.innerHTML + '</p>'); }
+    else if (n.nodeType === 1) inline += n.outerHTML;
+    else if (n.nodeType === 3) inline += esc(n.textContent);
+  }
+  flush();
+  while (out.length && /^<p>(<br>|\s|&nbsp;)*<\/p>$/.test(out[out.length - 1])) out.pop();
+  return out.join('\n');
+}
+function currentHtml() { return state.sourceMode ? source.value : serializeEditor(); }
+function hasContent(html) { return /<img|<hr|<figure/i.test(html) || html.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, '').trim().length > 0; }
+
+function setSaveState(text, err = false) { const s = $('#saveState'); s.textContent = text; s.classList.toggle('err', err); }
+let saveTimer = null;
+function markDirty() {
+  if (!state.current) return;
+  state.dirty = true;
+  setSaveState('Editing...');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => save(), 1200);
+  updateWordCount(); updateEmpty();
+}
+async function flushSave() { clearTimeout(saveTimer); if (state.saving) await state.saving; if (state.dirty) await save(); }
+
+async function save({ allowEmpty = false } = {}) {
+  if (state.saving) { state.pendingSave = true; return state.saving; }
+  const cur = state.current;
+  if (!cur || (!state.dirty && !(allowEmpty && !cur.id))) return;
+  const html = currentHtml();
+  if (!cur.id && !allowEmpty && !cur.meta.title.trim() && !hasContent(html)) { state.dirty = false; setSaveState('New post'); return; }
+  clearTimeout(saveTimer);
+  state.dirty = false;
+  setSaveState('Saving...');
+  const m = cur.meta;
+  const payload = { id: cur.id, html, meta: { title: m.title, excerpt: m.excerpt, categories: m.categories, tags: m.tags, featured: m.featured } };
+  state.saving = (async () => {
+    try {
+      const r = await api('/api/post', { json: payload });
+      const wasNew = !cur.id;
+      cur.id = r.id;
+      for (const k of ['created', 'modified', 'wpId', 'wpLink', 'wpStatus', 'published', 'media']) cur.meta[k] = r.meta[k];
+      if (state.current === cur) {
+        setSaveState(state.dirty ? 'Editing...' : 'Saved ' + new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}));
+        if (wasNew) renderPanel(); else renderWpStatus();
+      }
+      await refreshList();
+    } catch (e) {
+      state.dirty = true;
+      setSaveState('Not saved!', true);
+      toast('Couldn\'t save: ' + e.message, 'error');
+    } finally {
+      state.saving = null;
+      if (state.pendingSave) { state.pendingSave = false; if (state.dirty) save(); }
+    }
+  })();
+  return state.saving;
+}
+async function ensureSaved() {
+  if (state.current.id) return;
+  state.dirty = true;
+  await save({ allowEmpty: true });
+  if (!state.current.id) throw new Error('Could not create the post folder.');
+}
+
+/* ------------------------------------------------------------------ editor basics */
+document.execCommand('defaultParagraphSeparator', false, 'p');
+function updateEmpty() { editor.classList.toggle('is-empty', !hasContent(editor.innerHTML) && !editor.querySelector('ul,ol,h2,h3,h4,blockquote,pre')); }
+const WORD_RE = /[A-Za-z0-9\u00C0-\uFFFF]+(?:['\u2019-][A-Za-z0-9\u00C0-\uFFFF]+)*/g;
+function textStats(text) {
+  text = String(text || '');
+  return {
+    words: (text.match(WORD_RE) || []).length,
+    chars: text.replace(/[\r\n]/g, '').length,
+    noSpaces: text.replace(/\s/g, '').length
+  };
+}
+function editorText() {
+  if (!state.sourceMode) return editor.innerText;
+  const d = new DOMParser().parseFromString(source.value, 'text/html');
+  return d.body.textContent || '';
+}
+function plural(n, w) { return `${n.toLocaleString()} ${w}${n === 1 ? '' : 's'}`; }
+function updateWordCount() {
+  const st = textStats(editorText());
+  const imgs = state.sourceMode ? (source.value.match(/<img/g) || []).length : $$('img', editor).length;
+  $('#wordCount').textContent = `${plural(st.words, 'word')}  \u00b7  ${plural(st.chars, 'character')}  \u00b7  ${plural(imgs, 'picture')}  \u00b7  ~${Math.max(1, Math.round(st.words / 230))} min read`;
+}
+function updateSelCount() {
+  const sel = getSelection();
+  let txt = '';
+  if (sel.rangeCount && !sel.isCollapsed && editor.contains(sel.anchorNode)) txt = sel.toString();
+  if (!txt.trim()) { $('#selCount').textContent = ''; return; }
+  const st = textStats(txt);
+  $('#selCount').textContent = `\u00b7  Selected: ${plural(st.words, 'word')}, ${plural(st.chars, 'character')}`;
+}
+$('#wordCount').addEventListener('click', () => {
+  if (!state.current) return;
+  const text = editorText(), st = textStats(text);
+  const holder = state.sourceMode ? new DOMParser().parseFromString(source.value, 'text/html').body : editor;
+  const paras = $$('p,li', holder).filter(p => p.textContent.trim()).length;
+  const sentences = (text.match(/[^.!?\n]+[.!?]+(\s|$)/g) || []).length || (st.words ? 1 : 0);
+  const headings = $$('h1,h2,h3,h4,h5,h6', holder).length;
+  const imgs = $$('img', holder).length, links = $$('a[href]', holder).length;
+  const m = state.current.meta;
+  const tl = (m.title || '').length, el = (m.excerpt || '').length;
+  const mins = n => n < 1 ? 'under 1 min' : `${Math.round(n)} min`;
+  const rows = [
+    ['Words', st.words], ['Characters (with spaces)', st.chars], ['Characters (no spaces)', st.noSpaces],
+    ['Paragraphs', paras], ['Sentences', sentences], ['Average words per sentence', sentences ? (st.words / sentences).toFixed(1) : '0'],
+    ['Headings', headings], ['Pictures', imgs], ['Links', links],
+    ['Reading time (230 words/min)', mins(st.words / 230)], ['Read-aloud time (130 words/min)', mins(st.words / 130)],
+    ['Title length', `${tl} characters${tl > 60 ? ' (search results show ~60)' : ''}`],
+    ['Excerpt length', `${el} characters${el > 160 ? ' (search results show ~160)' : ''}`]
+  ];
+  openModal({ title: 'Post statistics', body: `<table class="stats">${rows.map(r => `<tr><td>${esc(r[0])}</td><td>${typeof r[1] === 'number' ? r[1].toLocaleString() : esc(r[1])}</td></tr>`).join('')}</table>`,
+    buttons: [{ label: 'Close', primary: true }] });
+});
+editor.addEventListener('input', markDirty);
+titleEl.addEventListener('input', () => { if (!state.current) return; state.current.meta.title = titleEl.value; markDirty(); });
+titleEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); editor.focus(); } });
+source.addEventListener('input', markDirty);
+
+document.addEventListener('selectionchange', () => {
+  const sel = getSelection();
+  if (sel.rangeCount && editor.contains(sel.anchorNode)) {
+    state.savedRange = sel.getRangeAt(0).cloneRange();
+    updateToolbarState();
+  }
+  updateSelCount();
+});
+function blockOf(node) {
+  while (node && node !== editor) { if (node.nodeType === 1 && /^(P|H[1-6]|BLOCKQUOTE|PRE|LI|DIV)$/.test(node.nodeName)) return node; node = node.parentNode; }
+  return null;
+}
+function updateToolbarState() {
+  for (const b of $$('#toolbar [data-cmd]')) {
+    const c = b.dataset.cmd;
+    if (/^(bold|italic|underline|strikeThrough|insertUnorderedList|insertOrderedList|justifyLeft|justifyCenter|justifyRight)$/.test(c)) {
+      try { b.classList.toggle('on', document.queryCommandState(c)); } catch (e) {}
+    }
+  }
+  const sel = getSelection();
+  let bl = sel.rangeCount ? blockOf(sel.anchorNode) : null;
+  let tag = bl ? bl.nodeName.toLowerCase() : 'p';
+  if (tag === 'li' || tag === 'div') tag = 'p';
+  const inQuote = sel.rangeCount && sel.anchorNode && (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentNode).closest('blockquote');
+  if (inQuote && tag === 'p') tag = 'blockquote';
+  $('#blockType').value = tag;
+  let fam = '', fn = sel.rangeCount ? sel.anchorNode : null;
+  fn = fn && (fn.nodeType === 1 ? fn : fn.parentNode);
+  while (fn && fn !== editor) {
+    if (fn.style && fn.style.fontFamily && fn.style.fontFamily !== 'inherit') { fam = fn.style.fontFamily; break; }
+    if (fn.nodeName === 'FONT' && fn.getAttribute('face')) { fam = fn.getAttribute('face'); break; }
+    fn = fn.parentNode;
+  }
+  const match = fam && FONTS.find(f => firstFamily(f[1]).toLowerCase() === firstFamily(fam).toLowerCase());
+  $('#fontPick').value = match ? match[1] : '';
+  $('[data-act="quote"]').classList.toggle('on', !!inQuote);
+}
+function restoreRange() {
+  editor.focus();
+  if (state.savedRange && editor.contains(state.savedRange.startContainer)) {
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(state.savedRange);
+  }
+}
+function exec(cmd, val = null) { restoreRange(); document.execCommand(cmd, false, val); markDirty(); updateToolbarState(); }
+
+$('#toolbar').addEventListener('mousedown', e => { if (e.target.closest('button')) e.preventDefault(); });
+$('#toolbar').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.cmd) { deselectFig(); exec(b.dataset.cmd); return; }
+  const act = b.dataset.act;
+  if (act === 'quote') { const on = b.classList.contains('on'); exec('formatBlock', on ? 'p' : 'blockquote'); }
+  if (act === 'link') insertLink();
+  if (act === 'image') { restoreRange(); $('#filePick').click(); }
+  if (act === 'hr') { exec('insertHorizontalRule'); }
+  if (act === 'source') toggleSource(!state.sourceMode);
+  if (act === 'spell') { savePrefs({ spellcheck: !prefs.spellcheck }); toast(prefs.spellcheck ? 'Spell check on. Right-click an underlined word for suggestions.' : 'Spell check off.'); }
+});
+$('#blockType').addEventListener('change', e => { exec('formatBlock', e.target.value); });
+$('#fontPick').innerHTML = '<option value="">Default font</option>' + FONTS.map(f => `<option value="${esc(f[1])}" style="font-family:${esc(f[1])}">${esc(f[0])}</option>`).join('');
+$('#fontPick').addEventListener('change', e => {
+  const v = e.target.value;
+  restoreRange();
+  if (getSelection().isCollapsed) { toast('Select some text first, then pick a font.'); updateToolbarState(); return; }
+  document.execCommand('styleWithCSS', false, true);
+  document.execCommand('fontName', false, v || 'inherit');
+  document.execCommand('styleWithCSS', false, false);
+  cleanFontSpans();
+  markDirty(); updateToolbarState();
+});
+function cleanFontSpans() {
+  for (const el of $$('font[face]', editor)) {
+    const span = document.createElement('span'); span.style.fontFamily = el.getAttribute('face');
+    span.append(...el.childNodes); el.replaceWith(span);
+  }
+  for (const el of $$('[style*="font-family"]', editor)) {
+    if (el.style.fontFamily === 'inherit' || el.style.fontFamily === '') el.style.removeProperty('font-family');
+    if (!el.getAttribute('style')) el.removeAttribute('style');
+  }
+  for (const sp of $$('span', editor)) if (!sp.attributes.length) sp.replaceWith(...sp.childNodes);
+}
+
+async function insertLink() {
+  restoreRange();
+  const range = state.savedRange ? state.savedRange.cloneRange() : null;
+  const sel = getSelection();
+  const existing = sel.anchorNode ? (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentNode).closest('a') : null;
+  const res = await ask(existing ? 'Edit link' : 'Insert link', [
+    { label: 'Web address', value: existing ? existing.getAttribute('href') : 'https://', placeholder: 'https://example.com' },
+    { label: 'Text to show', value: existing ? existing.textContent : (range ? range.toString() : ''), hint: 'Leave as-is to keep the selected text.' },
+    { label: 'Open in a new tab', type: 'checkbox', value: existing ? existing.target === '_blank' : false }
+  ], 'Save link');
+  if (!res) return;
+  let [url, text, newTab] = res;
+  url = url.trim(); if (!url || url === 'https://') return;
+  if (!/^(https?:|mailto:|tel:|#|\/)/i.test(url)) url = 'https://' + url;
+  editor.focus();
+  if (existing) {
+    existing.setAttribute('href', url);
+    if (text.trim() && text !== existing.textContent) existing.textContent = text;
+    if (newTab) { existing.target = '_blank'; existing.rel = 'noopener'; } else { existing.removeAttribute('target'); existing.removeAttribute('rel'); }
+  } else {
+    if (range) { sel.removeAllRanges(); sel.addRange(range); }
+    const a = `<a href="${esc(url)}"${newTab ? ' target="_blank" rel="noopener"' : ''}>${esc(text.trim() || url)}</a>`;
+    document.execCommand('insertHTML', false, a);
+  }
+  markDirty();
+}
+
+function toggleSource(on) {
+  if (on === state.sourceMode) return;
+  if (on) {
+    deselectFig();
+    source.value = serializeEditor();
+    editor.hidden = true; source.hidden = false;
+    $('#toolbar').classList.add('source-mode'); $('#btnSource').classList.add('on');
+    state.sourceMode = true; source.focus();
+  } else {
+    state.sourceMode = false;
+    loadIntoEditor(source.value);
+    source.hidden = true; editor.hidden = false;
+    $('#toolbar').classList.remove('source-mode'); $('#btnSource').classList.remove('on');
+  }
+  updateWordCount();
+}
+
+/* ------------------------------------------------------------------ paste & drop */
+const ALLOWED = { P:[], H2:[], H3:[], H4:[], H5:[], H6:[], STRONG:[], B:[], EM:[], I:[], U:[], S:[], DEL:[], STRIKE:[], SUB:[], SUP:[], A:['href','title','target','rel'], UL:[], OL:[], LI:[], BLOCKQUOTE:[], BR:[], HR:[], PRE:[], CODE:[], IMG:['src','alt'], TABLE:[], THEAD:[], TBODY:[], TR:[], TH:['colspan','rowspan'], TD:['colspan','rowspan'] };
+const DROP = /^(SCRIPT|STYLE|META|LINK|TITLE|HEAD|IFRAME|OBJECT|EMBED|SVG|MATH|NOSCRIPT|TEMPLATE|BUTTON|INPUT|SELECT|TEXTAREA|FORM)$/;
+function cleanTree(node) {
+  for (const child of Array.from(node.childNodes)) {
+    if (child.nodeType === 8) { child.remove(); continue; }
+    if (child.nodeType !== 1) continue;
+    const tag = child.nodeName.toUpperCase();
+    if (DROP.test(tag) || tag.includes(':')) { if (tag.includes(':') && tag !== 'O:P') { cleanTree(child); child.replaceWith(...child.childNodes); } else child.remove(); continue; }
+    cleanTree(child);
+    const style = (child.getAttribute('style') || '').toLowerCase();
+    if (tag === 'SPAN' || (tag === 'B' && /font-weight:\s*(normal|400)/.test(style))) {
+      let inner = Array.from(child.childNodes);
+      const wrap = (name) => { const w = document.createElement(name); w.append(...inner); inner = [w]; };
+      if (/font-weight:\s*(bold|[6-9]00)/.test(style)) wrap('strong');
+      if (/font-style:\s*italic/.test(style)) wrap('em');
+      if (/text-decoration[^;]*underline/.test(style)) wrap('u');
+      child.replaceWith(...inner); continue;
+    }
+    if (tag === 'H1') { const h = document.createElement('h2'); h.append(...child.childNodes); child.replaceWith(h); continue; }
+    if (!ALLOWED[tag]) {
+      if (/^(DIV|SECTION|ARTICLE|HEADER|FOOTER|MAIN|ASIDE)$/.test(tag) && !child.querySelector('p,div,h2,h3,h4,h5,h6,ul,ol,blockquote,pre,table,section,article')) {
+        const p = document.createElement('p'); p.append(...child.childNodes); child.replaceWith(p);
+      } else child.replaceWith(...child.childNodes);
+      continue;
+    }
+    for (const a of Array.from(child.attributes)) if (!ALLOWED[tag].includes(a.name)) child.removeAttribute(a.name);
+    if (tag === 'A' && !/^(https?:|mailto:|tel:|#|\/)/i.test(child.getAttribute('href') || '')) child.removeAttribute('href');
+    if (tag === 'IMG' && !/^https?:/i.test(child.getAttribute('src') || '')) child.remove();
+  }
+}
+function sanitize(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  cleanTree(doc.body);
+  return doc.body.innerHTML.replace(/<p>\s*<\/p>/g, '');
+}
+editor.addEventListener('paste', e => {
+  const dt = e.clipboardData; if (!dt) return;
+  const files = Array.from(dt.files || []).filter(f => f.type.startsWith('image/'));
+  if (files.length) { e.preventDefault(); insertImages(files, getSelection().rangeCount ? getSelection().getRangeAt(0) : null); return; }
+  const html = dt.getData('text/html');
+  if (html) { e.preventDefault(); document.execCommand('insertHTML', false, sanitize(html)); markDirty(); return; }
+  const text = dt.getData('text/plain');
+  if (text && /\n/.test(text)) {
+    e.preventDefault();
+    const paras = text.replace(/\r/g, '').split(/\n{2,}/).map(p => '<p>' + esc(p).replace(/\n/g, '<br>') + '</p>').join('');
+    document.execCommand('insertHTML', false, paras); markDirty();
+  } else if (text) { e.preventDefault(); document.execCommand('insertText', false, text); }
+});
+const wrap = $('#editorWrap');
+let dragDepth = 0;
+wrap.addEventListener('dragenter', e => { if (e.dataTransfer.types.includes('Files')) { dragDepth++; wrap.classList.add('dragging'); } });
+wrap.addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) wrap.classList.remove('dragging'); });
+wrap.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); });
+wrap.addEventListener('drop', e => {
+  dragDepth = 0; wrap.classList.remove('dragging');
+  const files = Array.from(e.dataTransfer.files || []).filter(f => f.type.startsWith('image/'));
+  if (!files.length) return;
+  e.preventDefault();
+  if (state.sourceMode) { toast('Switch out of HTML view to add pictures.'); return; }
+  let range = document.caretRangeFromPoint ? document.caretRangeFromPoint(e.clientX, e.clientY) : null;
+  if (range && !editor.contains(range.startContainer)) range = null;
+  insertImages(files, range);
+});
+$('#filePick').addEventListener('change', e => {
+  const files = Array.from(e.target.files || []); e.target.value = '';
+  if (files.length) insertImages(files, state.savedRange);
+});
+
+/* ------------------------------------------------------------------ pictures */
+async function prepareImage(file) {
+  const max = (state.settings && state.settings.maxImageWidth) || 1920;
+  let name = file.name && file.name !== 'image.png' ? file.name : 'pasted-image.png';
+  if (file.type === 'image/gif') return { blob: file, name };
+  let bmp;
+  try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+  catch (e) { return { blob: file, name }; }
+  const isPng = file.type === 'image/png';
+  const scale = Math.min(1, max / bmp.width);
+  if (isPng && scale === 1) { bmp.close && bmp.close(); return { blob: file, name }; }
+  // JPEG/WebP are always re-encoded: this strips hidden camera data such as GPS location.
+  const c = document.createElement('canvas');
+  c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+  const g = c.getContext('2d');
+  if (!isPng) { g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); }
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(bmp, 0, 0, c.width, c.height);
+  bmp.close && bmp.close();
+  const type = isPng ? 'image/png' : 'image/jpeg';
+  const blob = await new Promise(res => c.toBlob(res, type, 0.86));
+  if (!isPng) name = name.replace(/\.[^.]+$/, '') + '.jpg';
+  return { blob, name };
+}
+function makeFigure(src, alt = '') {
+  const f = document.createElement('figure');
+  f.className = 'wp-block-image aligncenter';
+  f.style.width = '100%';
+  f.setAttribute('contenteditable', 'false');
+  const img = document.createElement('img');
+  img.src = src; img.alt = alt; img.setAttribute('style', 'width:100%;height:auto');
+  f.appendChild(img);
+  return f;
+}
+function topLevel(node) { while (node && node.parentNode !== editor) node = node.parentNode; return node; }
+function placeFigure(fig, range) {
+  let block = null, atStart = false;
+  if (range && editor.contains(range.startContainer)) {
+    if (range.startContainer === editor) block = editor.childNodes[range.startOffset] || null, atStart = !!block;
+    else {
+      block = topLevel(range.startContainer);
+      const pre = document.createRange(); pre.selectNodeContents(block); pre.setEnd(range.startContainer, range.startOffset);
+      atStart = pre.toString().length === 0 && !pre.cloneContents().querySelector('img');
+    }
+  }
+  if (!block) editor.appendChild(fig);
+  else if (block.nodeType === 1 && block.nodeName === 'P' && !block.textContent.trim() && !block.querySelector('img')) block.replaceWith(fig);
+  else if (atStart) block.before(fig);
+  else block.after(fig);
+  if (!fig.nextElementSibling) { const p = document.createElement('p'); p.innerHTML = '<br>'; fig.after(p); }
+}
+async function insertImages(files, range) {
+  if (!state.current) return;
+  deselectFig();
+  try { await ensureSaved(); } catch (e) { toast(e.message, 'error'); return; }
+  let last = null, count = 0;
+  setSaveState('Adding pictures...');
+  for (const file of files) {
+    if (!/^image\/(jpeg|png|gif|webp)$/.test(file.type)) { toast(`${file.name || 'That file'}: use JPG, PNG, GIF or WebP pictures.`, 'error'); continue; }
+    try {
+      const { blob, name } = await prepareImage(file);
+      const r = await api(`/api/image?id=${encodeURIComponent(state.current.id)}&name=${encodeURIComponent(name)}`, { body: blob });
+      const fig = makeFigure(fileUrl(r.src));
+      if (last) last.after(fig); else placeFigure(fig, range);
+      last = fig; count++;
+    } catch (e) { toast('Picture not added: ' + e.message, 'error'); }
+  }
+  if (count) { markDirty(); if (count === 1) selectFig(last); }
+  else setSaveState(state.dirty ? 'Editing...' : 'Saved');
+}
+
+function figRel(fig) { const m = ($('img', fig)?.getAttribute('src') || '').match(/\/(images\/[^?#]+)$/); return m ? decodeURIComponent(m[1]) : ''; }
+function markFeatured() {
+  const f = state.current && state.current.meta.featured;
+  for (const fig of $$('figure', editor)) fig.classList.toggle('is-featured', !!f && figRel(fig) === f);
+}
+function selectFig(fig) {
+  if (state.selFig && state.selFig !== fig) state.selFig.classList.remove('is-selected');
+  state.selFig = fig; fig.classList.add('is-selected');
+  getSelection().removeAllRanges();
+  $('#imgbar').hidden = false;
+  syncImgbar(); positionImgbar();
+}
+function deselectFig() {
+  if (state.selFig) state.selFig.classList.remove('is-selected');
+  state.selFig = null; $('#imgbar').hidden = true;
+}
+function figAlign(fig) { return ['alignleft', 'aligncenter', 'alignright', 'alignnone'].find(c => fig.classList.contains(c)) || 'alignnone'; }
+function figWidth(fig) { return parseInt(fig.style.width) || 100; }
+function syncImgbar() {
+  const fig = state.selFig; if (!fig) return;
+  const a = figAlign(fig), w = figWidth(fig);
+  for (const b of $$('#imgbar [data-img^="align"]')) b.classList.toggle('on', b.dataset.img === a);
+  for (const b of $$('#imgbar [data-w]')) b.classList.toggle('on', +b.dataset.w === w);
+  $('#imgWidth').value = w; $('#imgWidthLabel').textContent = w + '%';
+  $('#imgbar [data-img="featured"]').classList.toggle('on', figRel(fig) === state.current.meta.featured);
+}
+function positionImgbar() {
+  const fig = state.selFig, bar = $('#imgbar'); if (!fig || bar.hidden) return;
+  const r = fig.getBoundingClientRect(), wr = wrap.getBoundingClientRect(), bw = bar.offsetWidth, bh = bar.offsetHeight;
+  let top = r.top - bh - 10;
+  if (top < wr.top + 4) top = Math.min(Math.max(r.top + 10, wr.top + 4), wr.bottom - bh - 10);
+  let left = r.left + r.width / 2 - bw / 2;
+  left = Math.max(8, Math.min(left, innerWidth - bw - 8));
+  bar.style.top = top + 'px'; bar.style.left = left + 'px';
+}
+wrap.addEventListener('scroll', positionImgbar);
+addEventListener('resize', positionImgbar);
+editor.addEventListener('mousedown', e => {
+  const fig = e.target.closest('figure');
+  if (fig && editor.contains(fig)) { e.preventDefault(); selectFig(fig); }
+  else deselectFig();
+});
+document.addEventListener('mousedown', e => {
+  if (state.selFig && !e.target.closest('#imgbar') && !e.target.closest('#editor figure') && !e.target.closest('#modalBack')) deselectFig();
+});
+document.addEventListener('keydown', e => {
+  if (!state.selFig || e.target.closest('input,textarea,#modalBack')) return;
+  if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); figAction('delete'); }
+  if (e.key === 'Escape') deselectFig();
+});
+$('#imgbar').addEventListener('mousedown', e => { if (e.target.closest('button')) e.preventDefault(); });
+$('#imgbar').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.w) setFigWidth(+b.dataset.w);
+  else figAction(b.dataset.img);
+});
+$('#imgWidth').addEventListener('input', e => setFigWidth(+e.target.value));
+function setFigWidth(w) {
+  const fig = state.selFig; if (!fig) return;
+  fig.style.width = w + '%';
+  syncImgbar(); positionImgbar(); markDirty();
+}
+async function figAction(act) {
+  const fig = state.selFig; if (!fig) return;
+  if (/^align/.test(act)) {
+    fig.classList.remove('alignleft', 'aligncenter', 'alignright', 'alignnone');
+    fig.classList.add(act);
+    if ((act === 'alignleft' || act === 'alignright') && figWidth(fig) > 60) fig.style.width = '45%';
+  } else if (act === 'details') {
+    const img = $('img', fig), cap = $('figcaption', fig);
+    const res = await ask('Picture details', [
+      { label: 'Alt text (describes the picture for screen readers and search engines)', value: img.alt },
+      { label: 'Caption (shown under the picture)', value: cap ? cap.textContent : '', multiline: true }
+    ], 'Save');
+    if (!res) return;
+    img.alt = res[0].trim();
+    const text = res[1].trim();
+    if (text) { let c = cap || document.createElement('figcaption'); c.textContent = text; if (!cap) fig.appendChild(c); }
+    else if (cap) cap.remove();
+    if (state.selFig !== fig) selectFig(fig);
+  } else if (act === 'featured') {
+    const rel = figRel(fig);
+    state.current.meta.featured = state.current.meta.featured === rel ? '' : rel;
+    markFeatured(); renderFeatured();
+  } else if (act === 'up') {
+    const prev = fig.previousElementSibling; if (prev) prev.before(fig);
+  } else if (act === 'down') {
+    const next = fig.nextElementSibling; if (next) next.after(fig);
+    if (!fig.nextElementSibling) { const p = document.createElement('p'); p.innerHTML = '<br>'; fig.after(p); }
+  } else if (act === 'delete') {
+    const rel = figRel(fig);
+    deselectFig();
+    const next = fig.nextElementSibling;
+    fig.remove();
+    if (rel && rel === state.current.meta.featured) renderFeatured();   // stays featured, just no longer in the body
+    if (next) { const r = document.createRange(); r.setStart(next, 0); r.collapse(true); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+    if (!editor.firstChild) editor.innerHTML = '<p><br></p>';
+    markDirty(); return;
+  }
+  syncImgbar(); markDirty();
+  requestAnimationFrame(() => { fig.scrollIntoView({ block: 'nearest' }); positionImgbar(); });
+}
+
+/* ------------------------------------------------------------------ side panel */
+function renderPanel() {
+  const m = state.current.meta;
+  $('#excerpt').value = m.excerpt || '';
+  $('#tags').value = m.tags || '';
+  renderCategories(); renderFeatured(); renderWpStatus();
+  $('#localInfo').textContent = state.current.id ? (state.postsDir + '\\' + state.current.id) : 'Not saved yet - starts saving as soon as you type.';
+  $('#folderInfo').textContent = state.current.id ? 'Saved in ' + state.postsDir + '\\' + state.current.id : '';
+  $('#showFolder').disabled = $('#deletePost').disabled = !state.current.id;
+}
+$('#excerpt').addEventListener('input', e => { state.current.meta.excerpt = e.target.value; markDirty(); });
+$('#tags').addEventListener('input', e => { state.current.meta.tags = e.target.value; markDirty(); });
+$('#togglePanel').addEventListener('click', () => { $('#panel').classList.toggle('hidden'); positionImgbar(); });
+
+function renderCategories() {
+  const box = $('#catList');
+  if (!state.categories) {
+    box.innerHTML = state.settings && state.settings.hasPassword
+      ? '<div class="hint">Click "Reload from WordPress" to load categories.</div>'
+      : '<div class="hint">Connect to WordPress in Settings to load categories.</div>';
+    return;
+  }
+  if (!state.categories.length) { box.innerHTML = '<div class="hint">No categories on the site yet.</div>'; return; }
+  const sel = new Set((state.current.meta.categories || []).map(Number));
+  const byParent = {};
+  for (const c of state.categories) (byParent[c.parent || 0] ||= []).push(c);
+  const rows = [];
+  const walk = (pid, depth) => { for (const c of byParent[pid] || []) { rows.push(`<label class="${depth ? 'child' : ''}" style="padding-left:${depth * 16}px"><input type="checkbox" value="${c.id}" ${sel.has(c.id) ? 'checked' : ''}> ${esc(c.name)}</label>`); if (depth < 6) walk(c.id, depth + 1); } };
+  walk(0, 0);
+  for (const c of state.categories) if (c.parent && !state.categories.some(p => p.id === c.parent)) rows.push(`<label><input type="checkbox" value="${c.id}" ${sel.has(c.id) ? 'checked' : ''}> ${esc(c.name)}</label>`);
+  box.innerHTML = rows.join('');
+}
+$('#catList').addEventListener('change', () => {
+  state.current.meta.categories = $$('#catList input:checked').map(i => +i.value);
+  markDirty();
+});
+async function loadCategories(showErrors = true) {
+  try { const r = await api('/api/categories'); state.categories = r.categories || []; renderCategories(); }
+  catch (e) { if (showErrors) toast(e.message, 'error'); }
+}
+$('#reloadCats').addEventListener('click', () => loadCategories(true));
+$('#addCat').addEventListener('click', async () => {
+  const name = $('#newCat').value.trim(); if (!name) return;
+  try {
+    const c = await api('/api/categories', { json: { name } });
+    if (!state.categories) state.categories = [];
+    if (!state.categories.some(x => x.id === c.id)) state.categories.push(c);
+    state.current.meta.categories = [...new Set([...(state.current.meta.categories || []), c.id])];
+    $('#newCat').value = ''; renderCategories(); markDirty();
+    toast(`Category "${c.name}" created on WordPress.`, 'ok');
+  } catch (e) { toast(e.message, 'error'); }
+});
+function featuredInBody(rel) { return $$('#editor figure').some(fig => figRel(fig) === rel); }
+function renderFeatured() {
+  const f = state.current.meta.featured, box = $('#featuredBox');
+  if (f && state.current.id) {
+    const where = featuredInBody(f) ? 'Also used in the post.' : 'Not shown in the post body.';
+    box.innerHTML = `<img src="${esc(fileUrl(f))}" alt="Featured image"><div class="fb-note">${where}</div>
+      <div class="fb-btns"><button id="changeFeatured">Change...</button><button id="clearFeatured">Remove</button></div>`;
+    $('#changeFeatured').onclick = () => $('#featuredPick').click();
+    $('#clearFeatured').onclick = () => { state.current.meta.featured = ''; markFeatured(); renderFeatured(); syncImgbar(); markDirty(); };
+  } else {
+    box.innerHTML = `<div class="fb-note">No featured image yet.</div>
+      <div class="fb-btns"><button id="chooseFeatured">Choose image...</button></div>
+      <div class="fb-note">Or drop a picture here, or click a picture in your post and choose <b>&#9733; Featured</b>.</div>`;
+    $('#chooseFeatured').onclick = () => $('#featuredPick').click();
+  }
+}
+async function setFeaturedFromFile(file) {
+  if (!file || !state.current) return;
+  if (!/^image\/(jpeg|png|gif|webp)$/.test(file.type)) { toast('Use a JPG, PNG, GIF or WebP picture.', 'error'); return; }
+  const box = $('#featuredBox');
+  try {
+    await ensureSaved();
+    box.innerHTML = '<div class="fb-note"><span class="spinner"></span>Adding featured image...</div>';
+    const { blob, name } = await prepareImage(file);
+    const r = await api(`/api/image?id=${encodeURIComponent(state.current.id)}&name=${encodeURIComponent('featured-' + name.replace(/^featured-/, ''))}`, { body: blob });
+    state.current.meta.featured = r.src;
+    markFeatured(); syncImgbar(); markDirty();
+    toast('Featured image set.', 'ok');
+  } catch (e) { toast('Featured image not set: ' + e.message, 'error'); }
+  renderFeatured();
+}
+$('#featuredPick').addEventListener('change', e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; setFeaturedFromFile(f); });
+(() => {
+  const box = $('#featuredBox');
+  box.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); box.classList.add('dragover'); } });
+  box.addEventListener('dragleave', () => box.classList.remove('dragover'));
+  box.addEventListener('drop', e => {
+    box.classList.remove('dragover');
+    const f = Array.from(e.dataTransfer.files || []).find(x => x.type.startsWith('image/'));
+    if (f) { e.preventDefault(); setFeaturedFromFile(f); }
+  });
+})();
+function siteBase() { return ((state.settings && state.settings.siteUrl) || '').replace(/\/+$/, '').replace(/^(?!https?:\/\/)/, 'https://'); }
+function renderWpStatus() {
+  const m = state.current.meta, box = $('#wpStatus');
+  if (!m.wpId) { box.innerHTML = 'Not sent to WordPress yet.'; return; }
+  const label = { publish: 'Published', draft: 'Draft on WordPress', pending: 'Pending review', private: 'Private', future: 'Scheduled' }[m.wpStatus] || m.wpStatus;
+  const changed = m.published && m.modified > m.published;
+  box.innerHTML = `<b>${esc(label)}</b> (post #${esc(m.wpId)})<br><span class="hint">Last sent ${esc(fmtDate(m.published))}</span>
+    ${changed ? '<div style="color:var(--accent);margin-top:4px">You\'ve made changes since then.</div>' : ''}
+    <div class="small-btns"><button data-open="view">View on site</button><button data-open="edit">Open in WP admin</button></div>`;
+  $('[data-open="view"]', box).onclick = () => openUrl(m.wpLink);
+  $('[data-open="edit"]', box).onclick = () => openUrl(siteBase() + '/wp-admin/post.php?post=' + m.wpId + '&action=edit');
+}
+function openUrl(u) { if (u) api('/api/openurl?url=' + encodeURIComponent(u)).catch(e => toast(e.message, 'error')); }
+$('#showFolder').addEventListener('click', () => { if (state.current.id) api('/api/open?id=' + encodeURIComponent(state.current.id)).catch(e => toast(e.message, 'error')); });
+$('#openRoot').addEventListener('click', () => api('/api/open').catch(e => toast(e.message, 'error')));
+$('#deletePost').addEventListener('click', () => {
+  const cur = state.current; if (!cur.id) return;
+  openModal({ title: 'Delete this post?', body: `<p>"<b>${esc(cur.meta.title || 'Untitled')}</b>" and its pictures will be moved to the Windows Recycle Bin.</p>${cur.meta.wpId ? '<p class="hint">The copy on WordPress is not touched.</p>' : ''}`,
+    buttons: [{ label: 'Cancel' }, { label: 'Move to Recycle Bin', primary: true, action: async () => {
+      try {
+        clearTimeout(saveTimer); state.dirty = false;
+        await api('/api/delete?id=' + encodeURIComponent(cur.id), { method: 'POST' });
+        await refreshList();
+        state.current = null;
+        if (state.posts.length) await openPost(state.posts[0].id); else await newPost();
+        toast('Post moved to the Recycle Bin.');
+      } catch (e) { toast(e.message, 'error'); }
+    } }] });
+});
+
+/* ------------------------------------------------------------------ preview */
+function previewDoc() {
+  const base = location.origin + '/files/' + encodeURIComponent(state.current.id || '_') + '/';
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><base href="${esc(base)}"><style>
+    body{font:18px/1.7 Georgia,serif;color:#222;max-width:720px;margin:40px auto;padding:0 24px}
+    h1{font-size:2.2em;line-height:1.2;margin:0 0 .6em}
+    img{max-width:100%;height:auto} figure{margin:1em 0} figcaption{font:13px/1.4 "Segoe UI",sans-serif;color:#777;text-align:center;margin-top:6px}
+    .alignleft{float:left;margin:.3em 1.4em 1em 0}.alignright{float:right;margin:.3em 0 1em 1.4em}.aligncenter{margin-left:auto;margin-right:auto}
+    blockquote{border-left:4px solid #2f5bd3;margin:1em 0;padding:.2em 1.2em;font-style:italic;color:#444}
+    pre{background:#f5f5f3;padding:12px;border-radius:6px;white-space:pre-wrap} a{color:#2f5bd3} hr{border:none;border-top:2px solid #ddd;margin:2em 0}
+    article::after{content:"";display:block;clear:both}
+    .featured-hero{width:100%;border-radius:4px;margin:0 0 1.2em}
+  </style></head><body><article><h1>${esc(state.current.meta.title || 'Untitled')}</h1>${state.current.meta.featured ? `<img class="featured-hero" src="${esc(state.current.meta.featured)}" alt="">` : ''}${currentHtml()}</article></body></html>`;
+}
+$('#previewBtn').addEventListener('click', () => {
+  const frame = document.createElement('iframe');
+  frame.setAttribute('sandbox', 'allow-same-origin');
+  openModal({ title: 'Preview', body: frame, wide: true, buttons: [{ label: 'Close', primary: true }], onOpen: () => { frame.srcdoc = previewDoc(); } });
+});
+
+/* ------------------------------------------------------------------ export to Word */
+function exportName() {
+  let n = (state.current.meta.title || '').replace(/[^A-Za-z0-9 ._()'&,-]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/^[^A-Za-z0-9]+/, '').replace(/[ .]+$/, '');
+  return (n || 'Untitled').slice(0, 100) + '.docx';
+}
+$('#exportBtn').addEventListener('click', async () => {
+  if (!state.current) return;
+  if (state.sourceMode) toggleSource(false);
+  deselectFig();
+  const btn = $('#exportBtn'), label = btn.textContent;
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Exporting...';
+  try {
+    await ensureSaved(); await flushSave();
+    const cur = state.current, m = cur.meta;
+    const blob = await window.buildDocx({ title: m.title || 'Untitled', excerpt: m.excerpt, html: currentHtml(), font: prefs.exportFont ? firstFamily(fontStack(prefs.font)) : 'Georgia', resolveSrc: s => /^images\//.test(s) ? fileUrl(s) : s });
+    const name = exportName();
+    const q = 'id=' + encodeURIComponent(cur.id) + '&name=' + encodeURIComponent(name);
+    const r = await api('/api/export?' + q, { body: blob });
+    openModal({ title: 'Exported to Word', body: `<p>Saved <b>${esc(r.name)}</b> in this post's folder.</p>
+        <p class="hint" style="word-break:break-all">${esc(r.path)}</p>
+        <p class="hint">Opens in Microsoft Word. For Google Docs, upload the file to Google Drive, then right-click it and choose <b>Open with &rarr; Google Docs</b>.</p>
+        <p class="hint">This is a copy: edits made in Word don't come back into CrowderSphere. Export again any time to refresh it.</p>`,
+      buttons: [
+        { label: 'Show in folder', action: () => { api('/api/open?id=' + encodeURIComponent(cur.id)).catch(e => toast(e.message, 'error')); } },
+        { label: 'Open in Word', primary: true, action: () => { api('/api/openfile?' + q, { method: 'POST' }).catch(e => toast(e.message, 'error')); } }
+      ] });
+  } catch (e) { toast('Export failed: ' + e.message, 'error'); }
+  finally { btn.disabled = false; btn.textContent = label; }
+});
+
+/* ------------------------------------------------------------------ publish */
+$('#publishBtn').addEventListener('click', async () => {
+  if (!state.current) return;
+  if (state.sourceMode) toggleSource(false);
+  deselectFig();
+  if (!state.settings || !state.settings.siteUrl || !state.settings.hasPassword) {
+    openModal({ title: 'Connect to WordPress first', body: '<p>Add your site address, username and an application password in Settings, then come back to send this post.</p>',
+      buttons: [{ label: 'Cancel' }, { label: 'Open Settings', primary: true, action: () => { setTimeout(openSettings, 50); } }] });
+    return;
+  }
+  const m = state.current.meta;
+  const html = currentHtml();
+  const nImgs = (html.match(/src="(\/files\/[^"]+|images\/[^"]+)"/g) || []).length;
+  const missingAlt = $$('figure img', editor).filter(i => !i.alt).length;
+  const checks = [];
+  if (!m.title.trim()) checks.push('<li class="warn">&#9888; The post needs a title.</li>');
+  if (!hasContent(html)) checks.push('<li class="warn">&#9888; The post is empty.</li>');
+  if (!(m.categories || []).length) checks.push('<li class="warn">&#9888; No category picked (WordPress will use its default).</li>');
+  if (!m.featured) checks.push('<li class="warn">&#9888; No featured image.</li>');
+  if (missingAlt) checks.push(`<li class="warn">&#9888; ${missingAlt} picture${missingAlt > 1 ? 's have' : ' has'} no alt text.</li>`);
+  if (nImgs) checks.push(`<li>&#10003; ${nImgs} picture${nImgs > 1 ? 's' : ''} will be uploaded (only new or changed ones are re-sent).</li>`);
+  const isLive = m.wpStatus === 'publish';
+  const opts = isLive
+    ? `<label class="radio"><input type="radio" name="st" value="publish" checked><div><b>Update the published post</b><small>Changes go live right away.</small></div></label>
+       <label class="radio"><input type="radio" name="st" value="draft"><div><b>Switch back to draft</b><small>Takes the post off the site until you publish again.</small></div></label>`
+    : `<label class="radio"><input type="radio" name="st" value="draft" checked><div><b>Save as a draft on WordPress</b><small>Upload everything, but nobody sees it until you publish.</small></div></label>
+       <label class="radio"><input type="radio" name="st" value="publish"><div><b>Publish now</b><small>The post goes live on ${esc(siteBase().replace(/^https?:\/\//, ''))} immediately.</small></div></label>`;
+  const body = `${opts}<ul class="check-list">${checks.join('')}</ul><div id="pubResult" style="margin-top:10px"></div>`;
+  let finished = false;
+  openModal({ title: m.wpId ? 'Update on WordPress' : 'Send to WordPress', body, buttons: [
+    { label: 'Close' },
+    { label: m.wpId ? 'Send update' : 'Send', primary: true, id: 'pubGo', action: async (el, btn) => {
+      if (finished) return true;
+      if (!m.title.trim()) { $('#pubResult', el).innerHTML = '<span class="result-bad">Add a title first.</span>'; return false; }
+      const status = $('input[name=st]:checked', el).value;
+      btn.disabled = true;
+      $('#pubResult', el).innerHTML = '<span class="spinner"></span>Saving, uploading pictures and sending the post...';
+      try {
+        await flushSave();
+        const cur = state.current;
+        const r = await api('/api/publish', { json: { id: cur.id, status, html: currentHtml() } });
+        Object.assign(cur.meta, { wpId: r.meta.wpId, wpLink: r.meta.wpLink, wpStatus: r.meta.wpStatus, published: r.meta.published, modified: r.meta.modified, media: r.meta.media });
+        renderWpStatus(); await refreshList();
+        finished = true;
+        const word = r.meta.wpStatus === 'publish' ? 'Published!' : 'Saved as a draft on WordPress.';
+        $('#pubResult', el).innerHTML = `<span class="result-ok">&#10003; ${word}</span> <a href="#" id="pubView">View it</a>`;
+        $('#pubView', el).onclick = ev => { ev.preventDefault(); openUrl(r.meta.wpStatus === 'publish' ? r.meta.wpLink : siteBase() + '/wp-admin/post.php?post=' + r.meta.wpId + '&action=edit'); };
+        btn.textContent = 'Done'; btn.disabled = false;
+        toast(word, 'ok');
+      } catch (e) {
+        $('#pubResult', el).innerHTML = `<span class="result-bad">Not sent:</span> ${esc(e.message)}`;
+        btn.disabled = false;
+      }
+      return false;
+    } }
+  ] });
+});
+
+/* ------------------------------------------------------------------ settings */
+async function loadSettings() { state.settings = await api('/api/settings'); }
+function openSettings() {
+  const s = state.settings || {};
+  const body = `
+    <label class="field"><span>WordPress site address</span><input type="url" id="sSite" value="${esc(s.siteUrl)}" placeholder="https://myblog.com"></label>
+    <label class="field"><span>WordPress username</span><input type="text" id="sUser" value="${esc(s.username)}" autocomplete="off"></label>
+    <label class="field"><span>Application password</span><input type="password" id="sPass" placeholder="${s.hasPassword ? 'Saved (leave blank to keep it)' : 'xxxx xxxx xxxx xxxx xxxx xxxx'}" autocomplete="new-password">
+      <div class="hint">This is <b>not</b> your normal login password. To make one:</div>
+      <ol class="steps"><li>Log in to WordPress and go to <b>Users &rarr; Profile</b>.</li><li>Scroll to <b>Application Passwords</b>, type "CrowderSphere" and click <b>Add New Application Password</b>.</li><li>Copy the code it shows and paste it here. It's stored encrypted under your Windows account.</li></ol>
+    </label>
+    <div class="row" style="margin-bottom:14px"><button id="sTest">Save &amp; test connection</button><span id="sTestRes" style="font-size:13px"></span></div>
+    <label class="field"><span>Folder for posts on this computer</span><div class="row"><input type="text" id="sDir" value="${esc(s.postsDir)}"><button id="sBrowse">Browse...</button></div>
+      <div class="hint">Each post gets its own folder with post.html, post.json and an images folder. Changing this doesn't move existing posts.</div></label>
+    <label class="field"><span>Shrink pictures wider than (pixels)</span><input type="number" id="sMax" min="400" max="6000" step="10" value="${esc(s.maxImageWidth || 1920)}">
+      <div class="hint">Large phone photos are resized before they're stored. Location data is removed from photos.</div></label>
+    <div class="section-title">Appearance &amp; writing</div>
+    <div class="prefs-grid">
+      <label class="field"><span>Theme</span><select id="pTheme"><option value="light">Light</option><option value="dark">Dark</option><option value="system">Match Windows</option></select></label>
+      <label class="field"><span>Text size</span><select id="pSize">${[14,15,16,17,18,19,20,22,24].map(n => `<option value="${n}">${n} px${n === 18 ? ' (default)' : ''}</option>`).join('')}</select></label>
+      <label class="field"><span>Page width</span><select id="pWidth"><option value="fill">Fill the window</option><option value="wide">Wide (1100 px)</option><option value="reading">Reading column (780 px)</option></select></label>
+      <label class="field"><span>Zoom</span><select id="pZoom">${[50,60,70,80,90,100,110,120,130,140,150,175,200,250].map(n => `<option value="${n / 100}">${n}%</option>`).join('')}</select></label>
+    </div>
+    <label class="field"><span>Writing font</span><select id="pFont">${FONTS.map(f => `<option value="${esc(f[0])}" style="font-family:${esc(f[1])}">${esc(f[0])}</option>`).join('')}</select>
+      <div class="hint">How text looks while you write. Your WordPress theme decides the font on your site, unless you change it for selected text with the font menu in the toolbar.</div></label>
+    <label class="field" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="pExport"> Use the writing font in Word exports</label>
+    <label class="field" style="display:flex;gap:8px;align-items:center;margin-bottom:4px"><input type="checkbox" id="pSpell"> Check spelling as I type</label>
+    <div class="hint" style="margin-bottom:12px">Misspelled words get a red underline. Right-click one for suggestions or "Add to dictionary". Spelling languages, and Microsoft Editor grammar checking, are set in Edge under Settings &rarr; Languages.</div>
+    <div class="hint" style="text-align:right">CrowderSphere ${esc(s.version || '')}</div>`;
+  const before = Object.assign({}, prefs);
+  let saved = false;
+  const readPrefs = el => ({ theme: $('#pTheme', el).value, font: $('#pFont', el).value, fontSize: +$('#pSize', el).value, pageWidth: $('#pWidth', el).value, zoom: +$('#pZoom', el).value, exportFont: $('#pExport', el).checked, spellcheck: $('#pSpell', el).checked });
+  const collect = el => ({ siteUrl: $('#sSite', el).value.trim(), username: $('#sUser', el).value.trim(), appPassword: $('#sPass', el).value, postsDir: $('#sDir', el).value.trim(), maxImageWidth: +$('#sMax', el).value || 1920, prefs: readPrefs(el) });
+  const saveIt = async el => {
+    const beforeDir = state.settings && state.settings.postsDir;
+    const data = collect(el);
+    state.settings = await api('/api/settings', { json: data });
+    prefs = Object.assign({}, prefs, data.prefs); cachePrefs(); applyPrefs(); saved = true;
+    $('#sPass', el).value = ''; $('#sPass', el).placeholder = state.settings.hasPassword ? 'Saved (leave blank to keep it)' : '';
+    if (beforeDir !== state.settings.postsDir) { await flushSave(); state.current = null; await refreshList(); if (state.posts.length) await openPost(state.posts[0].id); else await newPost(); }
+  };
+  openModal({ title: 'Settings', body, buttons: [
+    { label: 'Cancel' },
+    { label: 'Save', primary: true, action: async el => { try { await saveIt(el); state.categories = null; renderCategories(); if (state.settings.hasPassword) loadCategories(false); toast('Settings saved.', 'ok'); } catch (e) { toast(e.message, 'error'); return false; } } }
+  ], onClose: () => { if (!saved) { prefs = before; applyPrefs(); } }, onOpen: el => {
+    $('#pTheme', el).value = prefs.theme; $('#pFont', el).value = prefs.font; $('#pSize', el).value = String(prefs.fontSize);
+    $('#pExport', el).checked = !!prefs.exportFont; $('#pSpell', el).checked = !!prefs.spellcheck;
+    $('#pWidth', el).value = prefs.pageWidth || 'fill';
+    const zSel = $('#pZoom', el), zv = +prefs.zoom || 1;
+    if (![...zSel.options].some(o => +o.value === zv)) zSel.insertAdjacentHTML('beforeend', `<option value="${zv}">${Math.round(zv * 100)}%</option>`);
+    zSel.value = String(zv);
+    for (const id of ['#pTheme', '#pFont', '#pSize', '#pWidth', '#pZoom', '#pExport', '#pSpell']) $(id, el).addEventListener('change', () => { prefs = Object.assign({}, prefs, readPrefs(el)); applyPrefs(); });
+    $('#sTest', el).onclick = async () => {
+      const res = $('#sTestRes', el);
+      res.innerHTML = '<span class="spinner"></span>Connecting...';
+      try {
+        await saveIt(el);
+        const r = await api('/api/test', { method: 'POST' });
+        res.innerHTML = `<span class="result-ok">&#10003; Connected as ${esc(r.name)}</span>` + (r.canPublish ? '' : ' <span class="result-bad">(this account can\'t publish - posts will go in as pending)</span>');
+        loadCategories(false);
+      } catch (e) { res.innerHTML = `<span class="result-bad">${esc(e.message)}</span>`; }
+    };
+    $('#sBrowse', el).onclick = async () => {
+      try { const r = await api('/api/browse?start=' + encodeURIComponent($('#sDir', el).value), { method: 'POST' }); if (r.path) $('#sDir', el).value = r.path; }
+      catch (e) { toast(e.message, 'error'); }
+    };
+  } });
+}
+$('#openSettings').addEventListener('click', openSettings);
+$('#themeBtn').addEventListener('click', () => savePrefs({ theme: isDark() ? 'light' : 'dark' }));
+$('#newPost').addEventListener('click', newPost);
+
+/* ------------------------------------------------------------------ keyboard, lifecycle */
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); if (state.current) { state.dirty = true; save(); } }
+  if (e.ctrlKey && e.key.toLowerCase() === 'k' && editor.contains(document.activeElement || editor)) { e.preventDefault(); insertLink(); }
+  if (e.ctrlKey && e.key.toLowerCase() === 'n') { e.preventDefault(); newPost(); }
+});
+setInterval(() => { api('/api/heartbeat', { method: 'POST' }).catch(() => {}); }, 20000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && state.dirty) save(); });
+addEventListener('pagehide', () => {
+  if (state.dirty && state.current && state.current.id) {
+    const m = state.current.meta;
+    try { fetch('/api/post', { method: 'POST', keepalive: true, headers: { 'X-Token': TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ id: state.current.id, html: currentHtml(), meta: { title: m.title, excerpt: m.excerpt, categories: m.categories, tags: m.tags, featured: m.featured } }) }); } catch (e) {}
+  }
+  navigator.sendBeacon('/api/bye?t=' + TOKEN, '');
+});
+
+let wasNarrow = innerWidth < 1000;
+addEventListener('resize', () => {
+  const narrow = innerWidth < 1000;
+  if (narrow && !wasNarrow) $('#panel').classList.add('hidden');
+  wasNarrow = narrow;
+});
+$('#panelClose').addEventListener('click', () => { $('#panel').classList.add('hidden'); });
+(async function init() {
+  if (innerWidth < 1000) $('#panel').classList.add('hidden');
+  try {
+    await loadSettings();
+    if (state.settings.prefs && Object.keys(state.settings.prefs).length) { prefs = Object.assign({}, DEFAULT_PREFS, state.settings.prefs); cachePrefs(); applyPrefs(); }
+    await refreshList();
+    if (state.posts.length) await openPost(state.posts[0].id); else await newPost();
+    if (!state.settings.siteUrl || !state.settings.hasPassword) setTimeout(() => toast('Tip: open Settings to connect your WordPress site.'), 800);
+    else loadCategories(false);
+  } catch (e) { toast(e.message, 'error'); }
+})();
+</script>
+</body>
+</html>

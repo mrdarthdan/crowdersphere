@@ -1,0 +1,7 @@
+# Built by Setup.cmd on the user's PC
+*.exe
+# Packaged downloads
+*.zip
+# Local test files
+test/
+node_modules/
