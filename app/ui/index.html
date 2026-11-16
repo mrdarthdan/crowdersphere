@@ -36,7 +36,7 @@ button.danger{color:var(--bad)}
 button.ghost{border-color:transparent;background:transparent}
 button.ghost:hover{background:var(--soft)}
 button:disabled{opacity:.5;cursor:default}
-input[type=text],input[type=url],input[type=password],input[type=number],textarea,select{border:1px solid var(--line);border-radius:7px;padding:7px 9px;background:var(--paper);width:100%}
+input[type=text],input[type=url],input[type=password],input[type=number],input[type=datetime-local],textarea,select{border:1px solid var(--line);border-radius:7px;padding:7px 9px;background:var(--paper);width:100%}
 input:focus,textarea:focus,select:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
 label.field{display:block;margin:0 0 12px}
 label.field>span{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.03em}
@@ -60,6 +60,10 @@ label.field>span{display:block;font-size:12px;font-weight:600;color:var(--muted)
 .badge.publish{background:var(--ok-soft);color:var(--ok)}
 .badge.draft,.badge.pending{background:var(--warn-soft);color:var(--warn)}
 .badge.changed{background:var(--accent-soft);color:var(--accent)}
+.badge.future{background:var(--accent-soft);color:var(--accent)}
+.sched-pick{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
+.sched-pick input[type=datetime-local]{border:1px solid var(--line);border-radius:7px;padding:6px 8px;background:var(--paper);color:inherit;font:inherit;color-scheme:light dark}
+.sched-pick .quick{font-size:12px;padding:4px 8px}
 .empty-list{color:var(--muted);padding:16px 10px;font-size:13px}
 .side-foot{border-top:1px solid var(--line);padding:10px;display:flex;gap:6px}
 .side-foot button{flex:1;font-size:13px}
@@ -452,6 +456,18 @@ function fmtDate(iso) {
   if (d.toDateString() === today.toDateString()) return 'Today ' + d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
   return d.toLocaleDateString([], {month:'short', day:'numeric', year: d.getFullYear() === today.getFullYear() ? undefined : 'numeric'});
 }
+function fmtWhen(iso) {   // full date + time, for scheduled posts
+  if (!iso) return '';
+  const d = new Date(iso); if (isNaN(d)) return iso;
+  return d.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+function toLocalInput(d) {  // Date -> value for <input type="datetime-local">
+  const z = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`;
+}
+function defaultScheduleTime() {  // tomorrow at 8:00 AM
+  const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(8, 0, 0, 0); return d;
+}
 function toast(msg, kind = '') {
   const t = document.createElement('div');
   t.className = 'toast ' + kind; t.textContent = msg;
@@ -471,7 +487,7 @@ async function api(path, opts = {}) {
   if (!res.ok || (data && data.error)) throw new Error((data && data.error) || ('Request failed (HTTP ' + res.status + ')'));
   return data;
 }
-function blankMeta() { return { title:'', excerpt:'', categories:[], tags:'', featured:'', wpId:null, wpLink:'', wpStatus:'', published:'', modified:'', created:'', media:{} }; }
+function blankMeta() { return { title:'', excerpt:'', categories:[], tags:'', featured:'', wpId:null, wpLink:'', wpStatus:'', published:'', scheduled:'', modified:'', created:'', media:{} }; }
 function fileUrl(rel) { return '/files/' + encodeURIComponent(state.current.id) + '/' + rel; }
 
 /* ------------------------------------------------------------------ modal */
@@ -498,7 +514,7 @@ function openModal({ title, body, buttons = [], wide = false, onOpen, onClose })
   document.addEventListener('keydown', onKey);
   back.onmousedown = e => { if (e.target === back) close(); };
   if (onOpen) onOpen(m);
-  const first = $('input:not([type=radio]):not([type=checkbox]),textarea', m); if (first) first.focus();
+  const first = $('input:not([type=radio]):not([type=checkbox]):not([type=datetime-local]),textarea', m); if (first) first.focus();
   return { el: m, close };
 }
 function ask(title, fields, okLabel = 'OK') {
@@ -526,7 +542,7 @@ async function refreshList() {
 function statusBadge(p) {
   if (!p.wpStatus) return '<span class="badge">Local only</span>';
   const label = { publish: 'Published', draft: 'WP draft', pending: 'Pending', private: 'Private', future: 'Scheduled' }[p.wpStatus] || p.wpStatus;
-  let h = `<span class="badge ${esc(p.wpStatus)}">${esc(label)}</span>`;
+  let h = `<span class="badge ${esc(p.wpStatus)}"${p.wpStatus === 'future' && p.scheduled ? ` title="Goes live ${esc(fmtWhen(p.scheduled))}"` : ''}>${esc(label)}${p.wpStatus === 'future' && p.scheduled ? ' ' + esc(fmtDate(p.scheduled)) : ''}</span>`;
   if (p.published && p.modified && p.modified > p.published) h += '<span class="badge changed">Edited</span>';
   return h;
 }
@@ -634,7 +650,7 @@ async function save({ allowEmpty = false } = {}) {
       const r = await api('/api/post', { json: payload });
       const wasNew = !cur.id;
       cur.id = r.id;
-      for (const k of ['created', 'modified', 'wpId', 'wpLink', 'wpStatus', 'published', 'media']) cur.meta[k] = r.meta[k];
+      for (const k of ['created', 'modified', 'wpId', 'wpLink', 'wpStatus', 'published', 'scheduled', 'media']) cur.meta[k] = r.meta[k];
       if (state.current === cur) {
         setSaveState(state.dirty ? 'Editing...' : 'Saved ' + new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}));
         if (wasNew) renderPanel(); else renderWpStatus();
@@ -1184,7 +1200,8 @@ function renderWpStatus() {
   if (!m.wpId) { box.innerHTML = 'Not sent to WordPress yet.'; return; }
   const label = { publish: 'Published', draft: 'Draft on WordPress', pending: 'Pending review', private: 'Private', future: 'Scheduled' }[m.wpStatus] || m.wpStatus;
   const changed = m.published && m.modified > m.published;
-  box.innerHTML = `<b>${esc(label)}</b> (post #${esc(m.wpId)})<br><span class="hint">Last sent ${esc(fmtDate(m.published))}</span>
+  const when = m.wpStatus === 'future' && m.scheduled ? `<br><span>Goes live <b>${esc(fmtWhen(m.scheduled))}</b></span>` : '';
+  box.innerHTML = `<b>${esc(label)}</b> (post #${esc(m.wpId)})${when}<br><span class="hint">Last sent ${esc(fmtDate(m.published))}</span>
     ${changed ? '<div style="color:var(--accent);margin-top:4px">You\'ve made changes since then.</div>' : ''}
     <div class="small-btns"><button data-open="view">View on site</button><button data-open="edit">Open in WP admin</button></div>`;
   $('[data-open="view"]', box).onclick = () => openUrl(m.wpLink);
@@ -1280,11 +1297,23 @@ $('#publishBtn').addEventListener('click', async () => {
   if (missingAlt) checks.push(`<li class="warn">&#9888; ${missingAlt} picture${missingAlt > 1 ? 's have' : ' has'} no alt text.</li>`);
   if (nImgs) checks.push(`<li>&#10003; ${nImgs} picture${nImgs > 1 ? 's' : ''} will be uploaded (only new or changed ones are re-sent).</li>`);
   const isLive = m.wpStatus === 'publish';
+  const isSched = m.wpStatus === 'future';
+  const host = esc(siteBase().replace(/^https?:\/\//, ''));
+  const schedStart = isSched && m.scheduled && new Date(m.scheduled) > new Date() ? new Date(m.scheduled) : defaultScheduleTime();
+  const schedOpt = (checked, title, note) => `<label class="radio"><input type="radio" name="st" value="future"${checked ? ' checked' : ''}><div><b>${title}</b><small>${note}</small>
+       <div class="sched-pick"><input type="datetime-local" id="schedAt" value="${toLocalInput(schedStart)}" min="${toLocalInput(new Date())}">
+         <button type="button" class="quick" data-q="tom8">Tomorrow 8 AM</button><button type="button" class="quick" data-q="sat8">Saturday 8 AM</button></div>
+       <small id="schedNote"></small></div></label>`;
   const opts = isLive
     ? `<label class="radio"><input type="radio" name="st" value="publish" checked><div><b>Update the published post</b><small>Changes go live right away.</small></div></label>
        <label class="radio"><input type="radio" name="st" value="draft"><div><b>Switch back to draft</b><small>Takes the post off the site until you publish again.</small></div></label>`
+    : isSched
+    ? `${schedOpt(true, 'Keep it scheduled', 'Sends your changes and keeps (or moves) the publish time.')}
+       <label class="radio"><input type="radio" name="st" value="publish"><div><b>Publish now instead</b><small>The post goes live on ${host} immediately.</small></div></label>
+       <label class="radio"><input type="radio" name="st" value="draft"><div><b>Unschedule (back to draft)</b><small>Cancels the scheduled time. Nobody sees it until you publish.</small></div></label>`
     : `<label class="radio"><input type="radio" name="st" value="draft" checked><div><b>Save as a draft on WordPress</b><small>Upload everything, but nobody sees it until you publish.</small></div></label>
-       <label class="radio"><input type="radio" name="st" value="publish"><div><b>Publish now</b><small>The post goes live on ${esc(siteBase().replace(/^https?:\/\//, ''))} immediately.</small></div></label>`;
+       <label class="radio"><input type="radio" name="st" value="publish"><div><b>Publish now</b><small>The post goes live on ${host} immediately.</small></div></label>
+       ${schedOpt(false, 'Schedule for later', `WordPress publishes it at the time you pick. Your PC doesn't need to be on.`)}`;
   const body = `${opts}<ul class="check-list">${checks.join('')}</ul><div id="pubResult" style="margin-top:10px"></div>`;
   let finished = false;
   openModal({ title: m.wpId ? 'Update on WordPress' : 'Send to WordPress', body, buttons: [
@@ -1293,16 +1322,25 @@ $('#publishBtn').addEventListener('click', async () => {
       if (finished) return true;
       if (!m.title.trim()) { $('#pubResult', el).innerHTML = '<span class="result-bad">Add a title first.</span>'; return false; }
       const status = $('input[name=st]:checked', el).value;
+      let scheduleAt = '';
+      if (status === 'future') {
+        const d = new Date($('#schedAt', el).value);
+        if (isNaN(d)) { $('#pubResult', el).innerHTML = '<span class="result-bad">Pick a date and time.</span>'; return false; }
+        if (d.getTime() < Date.now() + 90000) { $('#pubResult', el).innerHTML = '<span class="result-bad">Pick a time at least a couple of minutes from now.</span>'; return false; }
+        scheduleAt = d.toISOString();
+      }
       btn.disabled = true;
       $('#pubResult', el).innerHTML = '<span class="spinner"></span>Saving, uploading pictures and sending the post...';
       try {
         await flushSave();
         const cur = state.current;
-        const r = await api('/api/publish', { json: { id: cur.id, status, html: currentHtml() } });
-        Object.assign(cur.meta, { wpId: r.meta.wpId, wpLink: r.meta.wpLink, wpStatus: r.meta.wpStatus, published: r.meta.published, modified: r.meta.modified, media: r.meta.media });
+        const r = await api('/api/publish', { json: { id: cur.id, status, html: currentHtml(), scheduleAt } });
+        Object.assign(cur.meta, { wpId: r.meta.wpId, wpLink: r.meta.wpLink, wpStatus: r.meta.wpStatus, published: r.meta.published, scheduled: r.meta.scheduled || '', modified: r.meta.modified, media: r.meta.media });
         renderWpStatus(); await refreshList();
         finished = true;
-        const word = r.meta.wpStatus === 'publish' ? 'Published!' : 'Saved as a draft on WordPress.';
+        const word = r.meta.wpStatus === 'publish' ? 'Published!'
+          : r.meta.wpStatus === 'future' ? 'Scheduled for ' + fmtWhen(r.meta.scheduled) + '.'
+          : r.meta.wpStatus === 'pending' ? 'Sent for review (pending).' : 'Saved as a draft on WordPress.';
         $('#pubResult', el).innerHTML = `<span class="result-ok">&#10003; ${word}</span> <a href="#" id="pubView">View it</a>`;
         $('#pubView', el).onclick = ev => { ev.preventDefault(); openUrl(r.meta.wpStatus === 'publish' ? r.meta.wpLink : siteBase() + '/wp-admin/post.php?post=' + r.meta.wpId + '&action=edit'); };
         btn.textContent = 'Done'; btn.disabled = false;
@@ -1314,6 +1352,22 @@ $('#publishBtn').addEventListener('click', async () => {
       return false;
     } }
   ] });
+  const box = $('#modalBack'), at = $('#schedAt', box);
+  if (at) {
+    const note = () => {
+      const d = new Date(at.value);
+      $('#schedNote', box).textContent = isNaN(d) ? '' : (d <= new Date() ? 'That time has already passed.' : 'Goes live ' + fmtWhen(d.toISOString()) + ' (your computer\'s time zone).');
+    };
+    at.addEventListener('input', note);
+    at.addEventListener('focus', () => { $('input[name=st][value=future]', box).checked = true; });
+    $$('.quick', box).forEach(b => b.addEventListener('click', ev => {
+      ev.preventDefault();
+      const d = defaultScheduleTime();
+      if (b.dataset.q === 'sat8') { d.setDate(d.getDate() - 1); d.setDate(d.getDate() + ((6 - d.getDay() + 7) % 7 || 7)); }
+      at.value = toLocalInput(d); $('input[name=st][value=future]', box).checked = true; note();
+    }));
+    note();
+  }
 });
 
 /* ------------------------------------------------------------------ settings */
@@ -1419,9 +1473,24 @@ $('#panelClose').addEventListener('click', () => { $('#panel').classList.add('hi
     await refreshList();
     if (state.posts.length) await openPost(state.posts[0].id); else await newPost();
     if (!state.settings.siteUrl || !state.settings.hasPassword) setTimeout(() => toast('Tip: open Settings to connect your WordPress site.'), 800);
-    else loadCategories(false);
+    else { loadCategories(false); syncScheduled(); setInterval(syncScheduled, 5 * 60 * 1000); }
   } catch (e) { toast(e.message, 'error'); }
 })();
+// Scheduled posts go live on WordPress by themselves; catch the list up once their time has passed
+async function syncScheduled() {
+  if (!state.posts.some(p => p.wpStatus === 'future')) return;
+  try {
+    const r = await api('/api/sync-scheduled', { json: {} });
+    if (!(r.changed || []).length) return;
+    await refreshList();
+    if (state.current && r.changed.includes(state.current.id)) {
+      const p = state.posts.find(x => x.id === state.current.id);
+      if (p) { Object.assign(state.current.meta, { wpStatus: p.wpStatus, wpLink: p.wpLink, scheduled: p.scheduled || '' }); renderWpStatus(); }
+    }
+    const live = r.changed.filter(id => (state.posts.find(x => x.id === id) || {}).wpStatus === 'publish').length;
+    toast(live ? (live === 1 ? 'A scheduled post just went live.' : live + ' scheduled posts just went live.') : 'Updated scheduled posts from WordPress.', 'ok');
+  } catch (e) { /* offline or WordPress unreachable: try again later */ }
+}
 </script>
 </body>
 </html>

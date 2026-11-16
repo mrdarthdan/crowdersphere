@@ -78,12 +78,18 @@ The export is a copy. Edits you make in Word don't come back into CrowderSphere,
 
 ## Sending to WordPress
 
-Click **Send to WordPress** and choose **Save as a draft** or **Publish now**. CrowderSphere will:
+Click **Send to WordPress** and choose **Save as a draft**, **Publish now** or **Schedule for later**. CrowderSphere will:
 
 1. Upload any new or changed pictures to your Media Library. Pictures already uploaded are reused, not duplicated.
 2. Create the post, or update it if it was sent before, with the title, content, excerpt, categories, tags (new tags are created for you) and featured image.
 
-The sidebar badge shows each post's status: **Local only**, **WP draft**, **Published**, or **Edited** (you've made changes since you last sent it). From the post panel you can open the post on your site or in WP Admin.
+The sidebar badge shows each post's status: **Local only**, **WP draft**, **Scheduled** (with its date), **Published**, or **Edited** (you've made changes since you last sent it). From the post panel you can open the post on your site or in WP Admin.
+
+### Scheduling a post
+
+Choose **Schedule for later** and pick a date and time (or click **Tomorrow 8 AM** / **Saturday 8 AM**). Times are in your computer's time zone. WordPress holds the post and publishes it on its own at that time, so your PC doesn't need to be on.
+
+To change a scheduled post, click **Send to WordPress** again. You can send your edits and keep or move the time, **Publish now instead**, or **Unschedule** it back to a draft. Once the time passes, CrowderSphere checks with WordPress and switches the badge to **Published**.
 
 ## Troubleshooting
 

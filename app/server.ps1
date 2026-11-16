@@ -126,7 +126,7 @@ function New-Meta {
     return [pscustomobject]@{
         title = ''; excerpt = ''; categories = @(); tags = ''; featured = ''
         created = (Now-Iso); modified = (Now-Iso)
-        wpId = $null; wpLink = ''; wpStatus = ''; published = ''
+        wpId = $null; wpLink = ''; wpStatus = ''; published = ''; scheduled = ''
         media = (New-Object PSObject)
     }
 }
@@ -153,7 +153,7 @@ function Get-PostList {
         $m = Load-Meta $d.FullName
         [void]$list.Add([ordered]@{
             id = $d.Name; title = $m.title; modified = $m.modified; created = $m.created
-            wpStatus = $m.wpStatus; wpLink = $m.wpLink; published = $m.published
+            wpStatus = $m.wpStatus; wpLink = $m.wpLink; published = $m.published; scheduled = $m.scheduled
         })
     }
     return ,@($list | Sort-Object { $_.modified } -Descending)
@@ -344,7 +344,14 @@ function Ensure-Media([string]$dir, $meta, [string]$rel) {
     return $entry
 }
 
-function Publish-Post([string]$id, [string]$status, [string]$html) {
+# WordPress gives date_gmt as "2026-11-17T15:00:00" (UTC, no zone); store it as ISO UTC with a Z
+function To-UtcIso([string]$wpGmt) {
+    if (-not $wpGmt) { return '' }
+    $d = [datetime]::Parse($wpGmt, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]'AdjustToUniversal, AssumeUniversal')
+    return $d.ToString('yyyy-MM-ddTHH:mm:ss') + 'Z'
+}
+
+function Publish-Post([string]$id, [string]$status, [string]$html, [string]$scheduleAt = '') {
     $dir = Get-PostDir $id
     $meta = Load-Meta $dir
     if (-not $meta.title.Trim()) { throw "Give the post a title before sending it to WordPress." }
@@ -380,6 +387,20 @@ function Publish-Post([string]$id, [string]$status, [string]$html) {
         title = $meta.title; content = $content; excerpt = $meta.excerpt; status = $status
         categories = $cats; tags = $tagIds; featured_media = $featuredId
     }
+    # Scheduling: WordPress holds a "future" post and publishes it itself at date_gmt
+    $wasScheduled = ($meta.wpStatus -eq 'future')
+    if ($status -eq 'future') {
+        $when = [datetime]::MinValue
+        $ok = [datetime]::TryParse($scheduleAt, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]'AdjustToUniversal, AssumeUniversal', [ref]$when)
+        if (-not $ok) { throw "Pick a date and time to schedule the post for." }
+        if ($when -le [datetime]::UtcNow.AddMinutes(1)) { throw "The scheduled time has to be in the future." }
+        $payload['date_gmt'] = $when.ToString('yyyy-MM-ddTHH:mm:ss')
+    } elseif ($status -eq 'publish' -and $wasScheduled) {
+        # "Publish now" on a scheduled post: move its date to now, or WordPress would keep it scheduled
+        $payload['date_gmt'] = [datetime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss')
+    } elseif ($status -eq 'draft' -and $wasScheduled) {
+        $payload['date_gmt'] = $null   # forget the old schedule
+    }
     $json = To-Json $payload
 
     $r = $null
@@ -395,10 +416,42 @@ function Publish-Post([string]$id, [string]$status, [string]$html) {
     $meta.wpId = $r.id
     $meta.wpLink = $r.link
     $meta.wpStatus = $r.status
+    $meta.scheduled = if ($r.status -eq 'future') { To-UtcIso ([string]$r.date_gmt) } else { '' }
     $meta.published = Now-Iso
     $meta.modified = $meta.published
     Save-Meta $dir $meta
     return [ordered]@{ id = $id; meta = $meta }
+}
+
+# Scheduled posts go live on WordPress by themselves; once their time has passed, ask WordPress
+# for the real status so the post list stops saying "Scheduled".
+function Sync-Scheduled {
+    $changed = @()
+    if (-not $script:S.username -or -not $script:S.passwordEnc) { return ,$changed }
+    $root = Get-PostsRoot
+    foreach ($d in (Get-ChildItem -LiteralPath $root -Directory)) {
+        if (-not (Test-Path (Join-Path $d.FullName 'post.json'))) { continue }
+        $m = Load-Meta $d.FullName
+        if ($m.wpStatus -ne 'future' -or -not $m.wpId) { continue }
+        $due = $true
+        if ($m.scheduled) {
+            $t = [datetime]::MinValue
+            if ([datetime]::TryParse([string]$m.scheduled, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]'AdjustToUniversal, AssumeUniversal', [ref]$t)) {
+                $due = ($t -le [datetime]::UtcNow)
+            }
+        }
+        if (-not $due) { continue }
+        try { $r = Invoke-Wp 'GET' "/wp/v2/posts/$($m.wpId)" 'context=edit' $null $null $null }
+        catch { Write-Log "Sync-Scheduled $($d.Name): $($_.Exception.Message)"; continue }
+        if ($r.status -ne $m.wpStatus) {
+            $m.wpStatus = $r.status
+            if ($r.link) { $m.wpLink = $r.link }
+            $m.scheduled = if ($r.status -eq 'future') { To-UtcIso ([string]$r.date_gmt) } else { '' }
+            Save-Meta $d.FullName $m
+            $changed += $d.Name
+        }
+    }
+    return ,$changed
 }
 
 # ---------------------------------------------------------------- windows bits
@@ -574,8 +627,9 @@ function Handle-Request($ctx) {
         }
         '/api/publish'    {
             $b = Read-JsonBody $ctx
-            Send-Json $ctx (Publish-Post ([string]$b.id) ([string]$b.status) ([string]$b.html))
+            Send-Json $ctx (Publish-Post ([string]$b.id) ([string]$b.status) ([string]$b.html) ([string](Get-Prop $b 'scheduleAt' '')))
         }
+        '/api/sync-scheduled' { Send-Json $ctx @{ changed = (Sync-Scheduled) } }
         '/api/open'       {
             $target = if ($q['id']) { Get-PostDir $q['id'] } else { Get-PostsRoot }
             Start-Process explorer.exe -ArgumentList ('"' + $target + '"')
