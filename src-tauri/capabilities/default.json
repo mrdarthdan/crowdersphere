@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "What the editor window may use. Everything else (files, dialogs, opening links) goes through CrowderSphere's own commands, which check their inputs.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

@@ -1,24 +1,22 @@
 # CrowderSphere
 
-A Windows desktop editor for writing WordPress posts. You write in a WYSIWYG editor, add and arrange pictures, and the posts stay saved as folders on your PC. When you're ready, one click sends the post and its pictures to your blog.
+A desktop editor for writing WordPress posts, for Windows, Mac and Linux. You write in a WYSIWYG editor, add and arrange pictures, and the posts stay saved as folders on your computer. When you're ready, one click sends the post and its pictures to your blog.
+
+CrowderSphere is free and open source (MIT license). See the [code signing policy](#code-signing-policy) and [privacy](#privacy) below.
 
 ## Install
 
-1. Right-click **CrowderSphere.zip** and choose **Extract All**.
-2. Open the extracted folder and double-click **Setup.cmd**. If Windows shows "Windows protected your PC", click **More info**, then **Run anyway**. The app isn't code-signed, which is why you see this.
-3. In the setup window, click **Install**. You can change the install folder and choose whether to add a desktop shortcut.
+Download the installer for your computer from the [latest release](https://github.com/mrdarthdan/crowdersphere/releases/latest):
 
-Setup installs CrowderSphere just for your Windows account, so you don't need admin rights. Nothing is downloaded. Setup:
+- **Windows 10 or 11:** `CrowderSphere_<version>_x64-setup.exe`. Run it and follow the steps. It installs just for your Windows account, so you don't need admin rights.
+- **Mac:** `CrowderSphere_<version>_universal.dmg`, which works on Intel and Apple silicon Macs. Open it and drag CrowderSphere to Applications. The Mac app isn't signed by Apple yet, so the first time, right-click the app and choose **Open**.
+- **Linux:** the `.AppImage`, or the `.deb` (Debian, Ubuntu) or `.rpm` (Fedora) package.
 
-- builds **CrowderSphere.exe**
-- adds CrowderSphere to the Start menu (and, if you chose it, the desktop)
-- registers the app in **Settings → Apps → Installed apps**
+**Updating:** install the newer version over the old one. Your posts and WordPress connection are kept.
 
-**Updating:** run Setup.cmd from a newer copy and click **Update**. Your posts and WordPress connection are kept.
+**Uninstalling:** on Windows, go to **Settings → Apps → Installed apps → CrowderSphere → Uninstall**. On a Mac, drag CrowderSphere from Applications to the Trash. Your posts are never deleted.
 
-**Uninstalling:** go to **Settings → Apps → Installed apps → CrowderSphere → Uninstall**. Your posts are never deleted. The uninstaller asks whether to also forget your WordPress connection.
-
-You need Windows 10 or 11 with Microsoft Edge, which is built in.
+**Coming from version 1 (the Setup.cmd version)?** Install version 2, then uninstall the old copy from **Installed apps**. Your posts, settings and WordPress password carry over automatically.
 
 ## Connect your blog (one time)
 
@@ -27,7 +25,7 @@ You need Windows 10 or 11 with Microsoft Edge, which is built in.
 3. In CrowderSphere, click **Settings**. Enter your site address (for example `https://myblog.com`), your WordPress username and the application password.
 4. Click **Save & test connection**.
 
-The application password is stored encrypted under your Windows account in `%APPDATA%\CrowderSphere\settings.json`. To revoke access at any time, delete the password in WordPress.
+The application password is kept in your computer's password store (Windows Credential Manager, the macOS Keychain, or the Secret Service on Linux), not in a file. To revoke access at any time, delete the password in WordPress.
 
 ## Writing
 
@@ -52,7 +50,7 @@ The application password is stored encrypted under your Windows account in `%APP
 
 ## Where your posts live
 
-By default posts go in `Documents\Blog Posts`, and you can change this in Settings. Each post is a folder:
+By default posts go in `Blog Posts` in your Documents folder, and you can change this in Settings. Each post is a folder:
 
 ```
 2026-11-07-hiking-bryce-canyon/
@@ -95,7 +93,50 @@ To change a scheduled post, click **Send to WordPress** again. You can send your
 
 - **"HTTP 401" when testing the connection:** check the username and application password. Some web hosts strip login headers. Ask your host to pass the `Authorization` header through, or install a plugin that fixes "Application Passwords not working".
 - **"rest_cannot_create":** your WordPress account role can't publish. Use an Author, Editor or Administrator account.
-- **Nothing opens:** CrowderSphere runs a small private web server at `http://localhost:47821` and opens it in an Edge app window. Check that nothing else is using port 47821. The log file is `%APPDATA%\CrowderSphere\log.txt`.
-- **Closing:** close the window. The background part exits on its own a few seconds later.
+- **Something went wrong:** the log file is `%APPDATA%\CrowderSphere\log.txt` on Windows, `~/Library/Application Support/CrowderSphere/log.txt` on a Mac, and `~/.config/CrowderSphere/log.txt` on Linux. Please include it when you [report a problem](https://github.com/mrdarthdan/crowdersphere/issues).
 
 CrowderSphere works with self-hosted WordPress (WordPress 5.6 or newer). It also works with WordPress.com sites on plans that support plugins and application passwords.
+
+## Building from source
+
+CrowderSphere is a [Tauri 2](https://tauri.app) app: the editor is a web page shown in the system's own web view, and the back end is written in Rust.
+
+```
+app/ui/        the editor (HTML/JS); editor.js sets up TipTap, bridge.js talks to the back end
+src-tauri/     the back end (Rust): posts on disk, WordPress REST API, settings
+editor/        builds app/ui/vendor/tiptap.js (TipTap and ProseMirror) in CI
+dev/           a stand-in back end for running the editor in a browser, and its browser test
+app/*.ps1      version 1 (PowerShell), kept until everyone has moved to version 2
+```
+
+To build it you need [Rust](https://rustup.rs), Node.js 18+, and on Linux the [Tauri system packages](https://tauri.app/start/prerequisites/). Then, from the repository root:
+
+```
+cargo test --manifest-path src-tauri/Cargo.toml    # unit tests
+npx @tauri-apps/cli@^2 dev                         # run the app
+npx @tauri-apps/cli@^2 build                       # build installers into src-tauri/target/release/bundle
+node dev/editor-test.mjs                           # browser test of the editor (needs Playwright and Chrome)
+```
+
+Releases are built by GitHub Actions from tagged commits (`.github/workflows/release.yml`); see [SIGNING.md](SIGNING.md).
+
+## Code signing policy
+
+Windows releases are signed so that Windows can confirm they come from this project and haven't been altered.
+
+Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+- **Committers and reviewers:** [Daniel Crowder](https://github.com/mrdarthdan)
+- **Approvers:** [Daniel Crowder](https://github.com/mrdarthdan)
+
+Only installers built by this repository's GitHub Actions release workflow from its public source code are signed, and each signing request is approved by hand. Contributions from other people are reviewed before they are merged.
+
+## Privacy
+
+CrowderSphere does not collect data and has no analytics or telemetry. It will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it.
+
+The only connection it makes is to the WordPress site you set up in Settings, when you test the connection, load categories, send a post, or check on a scheduled post. It also opens links in your browser when you click them. Your posts stay on your computer until you send them.
+
+## License
+
+[MIT](LICENSE)

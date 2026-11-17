@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  SignPath artifact configuration for CrowderSphere.
+  Paste this into SignPath: project "crowdersphere" > Artifact configurations > "initial".
+  The release workflow uploads a zip holding the Windows installer and passes the app version
+  (from src-tauri/Cargo.toml) as the "version" parameter, so the installer's product name and
+  version must match before SignPath will sign it.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <pe-file path="CrowderSphere_*_x64-setup.exe" product-name="CrowderSphere" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>
