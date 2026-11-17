@@ -36,7 +36,14 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "nsis",
+      "app",
+      "dmg",
+      "deb",
+      "rpm",
+      "appimage"
+    ],
     "category": "Productivity",
     "shortDescription": "Write WordPress posts on your computer",
     "longDescription": "CrowderSphere is a desktop editor for writing WordPress posts. Posts are saved as plain folders on your computer, and one click sends a post and its pictures to your blog.",
@@ -57,6 +64,8 @@
     "macOS": {
       "signingIdentity": "-",
       "minimumSystemVersion": "10.15"
-    }
+    },
+    "publisher": "Daniel Crowder",
+    "homepage": "https://github.com/mrdarthdan/crowdersphere"
   }
 }

@@ -4,17 +4,27 @@ Unsigned installers work, but Windows shows "Windows protected your PC" and macO
 
 ## Windows: pick one
 
-### Option A: SignPath Foundation (free, for open-source projects)
+### Option A: SignPath Foundation (free, for open-source projects) — chosen
 
-SignPath Foundation issues the certificate and signs builds made by GitHub Actions from this public repository. The installer's publisher shows as "SignPath Foundation", and the project needs to stay fully open source.
+SignPath Foundation issues the certificate and signs the installers that GitHub Actions builds from this public repository. The installer's publisher shows as "SignPath Foundation". The repository is already set up for their rules: an OSI license (MIT), a [code signing policy](README.md#code-signing-policy) and [privacy statement](README.md#privacy) on the home page, release notes that link to both, builds from tagged commits with `Cargo.lock` pinned, and an uninstaller.
 
-1. Apply at <https://signpath.org/apply>. The project needs an OSI license (MIT ✓), a public repository, and releases built by CI (✓). Approval can take a few weeks.
-2. Once approved, in SignPath create a project with the slug `crowdersphere`, a signing policy `release-signing`, and an artifact configuration `initial` that signs the `.exe` in the uploaded zip.
-3. Link the GitHub repository to SignPath as a trusted build system, as their onboarding describes.
-4. Add these GitHub secrets:
-   - `SIGNPATH_API_TOKEN`
-   - `SIGNPATH_ORGANIZATION_ID`
-5. Add a short code-signing policy page (README section or website). SignPath requires one, with the line: *"Free code signing provided by SignPath.io, certificate by SignPath Foundation."*
+**1. Before applying**
+- Turn on two-factor authentication for your GitHub account (SignPath requires it for everyone on the team).
+- Publish at least one unsigned release (SignPath only signs projects that are already released): push a version tag, then publish the draft release.
+
+**2. Apply** at <https://signpath.org/apply> with the repository URL and the release page. Approval is case by case and can take a few weeks.
+
+**3. Once approved, in SignPath** (turn on two-factor sign-in there too):
+- Link the GitHub repository as a *trusted build system* (GitHub.com), as their onboarding describes.
+- Create a project with the slug `crowdersphere`.
+- Add an artifact configuration with the slug `initial` and paste in [`.signpath/artifact-configuration.xml`](.signpath/artifact-configuration.xml).
+- Use the signing policy `release-signing`, with yourself as approver.
+
+**4. Add two GitHub secrets** (Settings → Secrets and variables → Actions):
+- `SIGNPATH_API_TOKEN`: an API token for a SignPath user that can submit signing requests
+- `SIGNPATH_ORGANIZATION_ID`: from your SignPath dashboard address (`app.signpath.io/Web/<this>/...`)
+
+**5. Each release after that:** push the tag as usual. The Windows build waits (up to an hour) for you to approve the signing request in SignPath, then swaps the signed installer into the draft release. Publish the release once it's there.
 
 ### Option B: Azure Artifact Signing (paid, publisher shows your name)
 

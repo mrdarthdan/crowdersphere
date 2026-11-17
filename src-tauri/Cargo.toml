@@ -1,6 +1,6 @@
 [package]
 name = "crowdersphere"
-version = "1.6.0"
+version = "2.0.0"
 description = "Write WordPress posts on your computer and send them to your blog"
 authors = ["Daniel Crowder"]
 license = "MIT"
