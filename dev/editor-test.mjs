@@ -200,7 +200,7 @@ console.log('Word export');
   check(r.size > 2000, 'builds a .docx from the new editor\'s HTML', JSON.stringify(r));
   // a picture hosted on another site (different origin, no CORS headers) must still end up in the document
   const remote = await page.evaluate(async (src) => {
-    const blob = await window.buildDocx({ title: 'T', html: `<p>Web picture <img src="${src}" alt="w"></p>`, resolveSrc: s => s, fetchRemote: url => CS.remoteImage(url, TOKEN) });
+    const blob = await window.buildDocx({ title: 'T', html: `<p>Web picture <img src="${src}" alt="w"></p>`, resolveSrc: s => s, fetchRemote: url => CS.remoteImage(url) });
     const bytes = new Uint8Array(await blob.arrayBuffer());
     const text = new TextDecoder('latin1').decode(bytes);
     return { media: (text.match(/word\/media\/image\d+\.png/g) || []).length };

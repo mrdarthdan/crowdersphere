@@ -1,4 +1,4 @@
-# Rebuilds app/ui/vendor/tiptap.js whenever the editor bundle's sources change,
+# Rebuilds ui/vendor/tiptap.js whenever the editor bundle's sources change,
 # and commits the result so the app itself never needs an npm step to build.
 name: Editor bundle
 
@@ -24,12 +24,12 @@ jobs:
         run: |
           if [ -f package-lock.json ]; then npm ci; else npm install; fi
           npm run build
-          ls -la ../app/ui/vendor
+          ls -la ../ui/vendor
       - name: Commit the bundle
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app/ui/vendor editor/package-lock.json
+          git add ui/vendor editor/package-lock.json
           if git diff --cached --quiet; then echo "Bundle unchanged"; exit 0; fi
-          git commit -m "Rebuild editor bundle (app/ui/vendor/tiptap.js)"
+          git commit -m "Rebuild editor bundle (ui/vendor/tiptap.js)"
           git push

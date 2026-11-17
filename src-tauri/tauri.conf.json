@@ -3,7 +3,7 @@
   "productName": "CrowderSphere",
   "identifier": "blog.dancrowder.crowdersphere",
   "build": {
-    "frontendDist": "../app/ui"
+    "frontendDist": "../ui"
   },
   "app": {
     "withGlobalTauri": true,
@@ -58,7 +58,8 @@
     ],
     "windows": {
       "nsis": {
-        "installMode": "currentUser"
+        "installMode": "currentUser",
+        "installerHooks": "./windows/hooks.nsh"
       }
     },
     "macOS": {

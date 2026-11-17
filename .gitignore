@@ -1,7 +1,6 @@
-# Built by Setup.cmd on the user's PC
-*.exe
-# Packaged downloads
-*.zip
+# Dependencies and build output
+node_modules/
+src-tauri/target/
+src-tauri/gen/
 # Local test files
 test/
-node_modules/
