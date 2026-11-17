@@ -18,6 +18,7 @@ use std::sync::Mutex;
 use tauri::{Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
+use tauri_plugin_updater::UpdaterExt;
 
 struct AppState {
     settings: Mutex<Settings>,
@@ -276,6 +277,53 @@ async fn open_url(app: tauri::AppHandle, url: String) -> Res<Value> {
     Ok(json!({ "ok": true }))
 }
 
+// ------------------------------------------------------------------ updates
+
+/// Ask GitHub whether a newer release exists. Updates are checked against the public key in
+/// tauri.conf.json, so only releases signed with CrowderSphere's update key are offered.
+#[tauri::command]
+async fn check_update(app: tauri::AppHandle) -> Res<Value> {
+    let current = app.package_info().version.to_string();
+    let updater = app.updater().map_err(|e| format!("Updates aren't available: {e}"))?;
+    let found = logged(
+        "check_update",
+        updater.check().await.map_err(|e| format!("Couldn't check for updates: {e}")),
+    )?;
+    Ok(match found {
+        Some(u) => json!({ "available": true, "current": current, "version": u.version, "notes": u.body }),
+        None => json!({ "available": false, "current": current }),
+    })
+}
+
+/// Download and install the update, then restart. On Windows the installer closes the app itself.
+/// Progress is reported to the editor as "cs-update-progress" events: {done, total}.
+#[tauri::command]
+async fn install_update(app: tauri::AppHandle) -> Res<()> {
+    let updater = app.updater().map_err(|e| format!("Updates aren't available: {e}"))?;
+    let update = updater
+        .check()
+        .await
+        .map_err(|e| format!("Couldn't check for updates: {e}"))?
+        .ok_or("CrowderSphere is already up to date.")?;
+    log(&format!("Installing update {}", update.version));
+    let progress_app = app.clone();
+    let mut done: u64 = 0;
+    logged(
+        "install_update",
+        update
+            .download_and_install(
+                move |chunk, total| {
+                    done += chunk as u64;
+                    let _ = progress_app.emit("cs-update-progress", json!({ "done": done, "total": total }));
+                },
+                || {},
+            )
+            .await
+            .map_err(|e| format!("The update didn't install: {e}")),
+    )?;
+    app.restart();
+}
+
 /// Called by the editor once it has saved after a close request.
 #[tauri::command]
 async fn quit(app: tauri::AppHandle) -> Res<()> {
@@ -343,6 +391,7 @@ pub fn run() {
                 let _ = w.set_focus();
             }
         }))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(state)
@@ -379,6 +428,8 @@ pub fn run() {
             publish,
             sync_scheduled,
             remote_image,
+            check_update,
+            install_update,
             open_folder,
             browse_folder,
             open_url,

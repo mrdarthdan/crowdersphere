@@ -95,6 +95,24 @@
     return new Blob([bytes], { type: sniffImageType(bytes) });
   }
 
+  // Updates (desktop app only). checkUpdate -> {available, current, version?, notes?}
+  async function checkUpdate() {
+    if (!tauri) return { available: false, unsupported: true };
+    try { return await T.core.invoke('check_update'); }
+    catch (e) { throw (e instanceof Error ? e : new Error(String(e))); }
+  }
+  // Downloads and installs the update, then the app restarts. onProgress(fraction 0..1 or null)
+  async function installUpdate(onProgress) {
+    let unlisten = null;
+    if (onProgress && T.event) unlisten = await T.event.listen('cs-update-progress', ev => {
+      const p = ev.payload || {};
+      onProgress(p.total ? Math.min(1, p.done / p.total) : null);
+    });
+    try { await T.core.invoke('install_update'); }
+    catch (e) { throw (e instanceof Error ? e : new Error(String(e))); }
+    finally { if (unlisten) unlisten(); }
+  }
+
   // Desktop app: the window asks the editor to save before it closes
   function onCloseRequested(save) {
     if (!tauri || !T.event) return;
@@ -104,5 +122,5 @@
     });
   }
 
-  window.CS = { tauri, api, fileUrl, filesBase, relFromUrl, onCloseRequested, remoteImage };
+  window.CS = { tauri, api, fileUrl, filesBase, relFromUrl, onCloseRequested, remoteImage, checkUpdate, installUpdate };
 })();
