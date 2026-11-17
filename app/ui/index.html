@@ -365,6 +365,7 @@ ol.steps{padding-left:20px;margin:6px 0;font-size:13px;color:var(--muted)}
 <input id="filePick" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden>
 <input id="featuredPick" type="file" accept="image/jpeg,image/png,image/gif,image/webp" hidden>
 
+<script src="/bridge.js"></script>
 <script src="/docx.js"></script>
 <script>
 "use strict";
@@ -475,6 +476,7 @@ function toast(msg, kind = '') {
   setTimeout(() => t.remove(), kind === 'error' ? 7000 : 3200);
 }
 async function api(path, opts = {}) {
+  if (CS.tauri) return CS.api(path, opts);
   const init = { method: opts.method || (opts.json !== undefined || opts.body !== undefined ? 'POST' : 'GET'), headers: { 'X-Token': TOKEN } };
   if (opts.json !== undefined) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(opts.json); }
   else if (opts.body !== undefined) init.body = opts.body;
@@ -488,7 +490,7 @@ async function api(path, opts = {}) {
   return data;
 }
 function blankMeta() { return { title:'', excerpt:'', categories:[], tags:'', featured:'', wpId:null, wpLink:'', wpStatus:'', published:'', scheduled:'', modified:'', created:'', media:{} }; }
-function fileUrl(rel) { return '/files/' + encodeURIComponent(state.current.id) + '/' + rel; }
+function fileUrl(rel) { return CS.fileUrl(state.current.id, rel); }
 
 /* ------------------------------------------------------------------ modal */
 function openModal({ title, body, buttons = [], wide = false, onOpen, onClose }) {
@@ -601,8 +603,8 @@ function loadIntoEditor(html) {
 function serializeEditor() {
   const clone = editor.cloneNode(true);
   for (const img of $$('img', clone)) {
-    const m = (img.getAttribute('src') || '').match(/^\/files\/[^/]+\/(images\/[^?#]+)$/);
-    if (m) img.setAttribute('src', decodeURIComponent(m[1]));
+    const rel = CS.relFromUrl(img.getAttribute('src') || '');
+    if (rel) img.setAttribute('src', rel);
   }
   for (const el of $$('[contenteditable]', clone)) el.removeAttribute('contenteditable');
   for (const el of $$('.is-selected,.is-featured', clone)) { el.classList.remove('is-selected', 'is-featured'); if (!el.className) el.removeAttribute('class'); }
@@ -1227,7 +1229,7 @@ $('#deletePost').addEventListener('click', () => {
 
 /* ------------------------------------------------------------------ preview */
 function previewDoc() {
-  const base = location.origin + '/files/' + encodeURIComponent(state.current.id || '_') + '/';
+  const base = CS.filesBase(state.current.id);
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><base href="${esc(base)}"><style>
     body{font:18px/1.7 Georgia,serif;color:#222;max-width:720px;margin:40px auto;padding:0 24px}
     h1{font-size:2.2em;line-height:1.2;margin:0 0 .6em}
@@ -1448,9 +1450,11 @@ document.addEventListener('keydown', e => {
   if (e.ctrlKey && e.key.toLowerCase() === 'k' && editor.contains(document.activeElement || editor)) { e.preventDefault(); insertLink(); }
   if (e.ctrlKey && e.key.toLowerCase() === 'n') { e.preventDefault(); newPost(); }
 });
-setInterval(() => { api('/api/heartbeat', { method: 'POST' }).catch(() => {}); }, 20000);
+if (!CS.tauri) setInterval(() => { api('/api/heartbeat', { method: 'POST' }).catch(() => {}); }, 20000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && state.dirty) save(); });
+CS.onCloseRequested(flushSave);
 addEventListener('pagehide', () => {
+  if (CS.tauri) return;   // the desktop app saves through onCloseRequested instead
   if (state.dirty && state.current && state.current.id) {
     const m = state.current.meta;
     try { fetch('/api/post', { method: 'POST', keepalive: true, headers: { 'X-Token': TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ id: state.current.id, html: currentHtml(), meta: { title: m.title, excerpt: m.excerpt, categories: m.categories, tags: m.tags, featured: m.featured } }) }); } catch (e) {}

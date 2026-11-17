@@ -99,3 +99,27 @@ To change a scheduled post, click **Send to WordPress** again. You can send your
 - **Closing:** close the window. The background part exits on its own a few seconds later.
 
 CrowderSphere works with self-hosted WordPress (WordPress 5.6 or newer). It also works with WordPress.com sites on plans that support plugins and application passwords.
+
+## Building from source (desktop app, in progress)
+
+CrowderSphere is moving from the PowerShell version above to a [Tauri 2](https://tauri.app) desktop app that runs on Windows, macOS and Linux. Both use the same editor (`app/ui`) and the same post folders, so posts move over unchanged.
+
+```
+app/ui/        the editor (HTML/JS), shared by both versions; bridge.js picks the back end
+src-tauri/     the desktop app back end (Rust): posts on disk, WordPress REST API, settings
+app/*.ps1      the original PowerShell version (to be retired once the desktop app is released)
+```
+
+To build it you need [Rust](https://rustup.rs), Node.js 18+, and on Linux the [Tauri system packages](https://tauri.app/start/prerequisites/). Then, from the repository root:
+
+```
+cargo test --manifest-path src-tauri/Cargo.toml    # unit tests
+npx @tauri-apps/cli@^2 dev                         # run the app
+npx @tauri-apps/cli@^2 build                       # build installers into src-tauri/target/release/bundle
+```
+
+In the desktop app, the WordPress application password is kept in the system's password store (Windows Credential Manager, macOS Keychain, or the Secret Service on Linux) instead of settings.json. On Windows, a password saved by the PowerShell version is moved over automatically the first time the app starts.
+
+## License
+
+[MIT](LICENSE)

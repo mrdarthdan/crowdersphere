@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "CrowderSphere",
+  "version": "1.6.0",
+  "identifier": "blog.dancrowder.crowdersphere",
+  "build": {
+    "frontendDist": "../app/ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "CrowderSphere",
+        "width": 1440,
+        "height": 960,
+        "minWidth": 720,
+        "minHeight": 480,
+        "center": true,
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data: blob: https: http: csfiles: http://csfiles.localhost",
+        "font-src": "'self' data:",
+        "connect-src": "'self' ipc: http://ipc.localhost csfiles: http://csfiles.localhost https: data: blob:",
+        "frame-src": "'self' about: blob: data:"
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Productivity",
+    "shortDescription": "Write WordPress posts on your computer",
+    "longDescription": "CrowderSphere is a desktop editor for writing WordPress posts. Posts are saved as plain folders on your computer, and one click sends a post and its pictures to your blog.",
+    "copyright": "Copyright (c) 2026 Daniel Crowder. MIT License.",
+    "license": "MIT",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  }
+}
