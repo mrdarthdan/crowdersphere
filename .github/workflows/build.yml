@@ -25,6 +25,7 @@ jobs:
           npm init -y > /dev/null
           npm install --no-save playwright@1
           node editor-test.mjs
+          node onboarding-test.mjs
 
   build:
     strategy:

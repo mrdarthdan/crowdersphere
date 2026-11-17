@@ -2,6 +2,12 @@
 
 Each release's notes are taken from its section here, so they show on the GitHub release page and in the app's **Update available** window. Add a section for the new version before releasing.
 
+## 2.3.0
+
+- **Welcome tour** — a one-minute tour on first launch, and a **Welcome to CrowderSphere** sample post to experiment on.
+- **Help menu** — the new **?** button at the bottom left takes the tour again, opens the [Getting Started guide](https://github.com/mrdarthdan/crowdersphere/blob/main/docs/getting-started.md), or adds a fresh Welcome post.
+- **Mac:** keyboard shortcuts (new post, save, link, zoom) now use **Cmd** instead of Ctrl.
+
 ## 2.2.0
 
 - **New app icon** — redrawn so it's sharp at every size, from the taskbar to the Mac dock.

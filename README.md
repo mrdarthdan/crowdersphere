@@ -2,6 +2,8 @@
 
 A desktop editor for writing WordPress posts, for Windows, Mac and Linux. You write in a WYSIWYG editor, add and arrange pictures, and the posts stay saved as folders on your computer. When you're ready, one click sends the post and its pictures to your blog.
 
+**New to CrowderSphere? Read the [Getting Started guide](docs/getting-started.md)**, or take the tour inside the app (the **?** button at the bottom left).
+
 CrowderSphere is free and open source (MIT license). See the [code signing policy](#code-signing-policy) and [privacy](#privacy) below.
 
 ## Install
@@ -105,7 +107,8 @@ CrowderSphere is a [Tauri 2](https://tauri.app) app: the editor is a web page sh
 ui/            the editor (HTML/JS); editor.js sets up TipTap, bridge.js talks to the back end
 src-tauri/     the back end (Rust): posts on disk, WordPress REST API, settings
 editor/        builds ui/vendor/tiptap.js (TipTap and ProseMirror) in CI
-dev/           a stand-in back end for running the editor in a browser, and its browser test
+dev/           a stand-in back end for running the editor in a browser, the browser tests, and screenshots.mjs
+docs/          the Getting Started guide (its pictures come from dev/screenshots.mjs)
 src-tauri/windows/  installer additions (cleans up version 1 on Windows)
 ```
 

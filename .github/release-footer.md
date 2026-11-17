@@ -1,4 +1,4 @@
-CrowderSphere is a desktop editor for writing WordPress posts. Write with formatting and pictures, keep every post as a folder on your computer, export to Word, and send posts to your blog as drafts, published or scheduled. See the [README](https://github.com/mrdarthdan/crowdersphere#readme) for everything it does.
+CrowderSphere is a desktop editor for writing WordPress posts. Write with formatting and pictures, keep every post as a folder on your computer, export to Word, and send posts to your blog as drafts, published or scheduled. New to it? Start with the [Getting Started guide](https://github.com/mrdarthdan/crowdersphere/blob/main/docs/getting-started.md).
 
 **Already have CrowderSphere 2.1 or later?** It offers this update by itself.
 
