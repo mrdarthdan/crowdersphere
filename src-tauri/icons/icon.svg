@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="1024" height="1024">
+  <!-- CrowderSphere app icon: desert sunset, aperture sun, pen nib. Drawn at 256 units; scales to any size. -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="6" x2="0" y2="250" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2a385e"/>
+      <stop offset="0.45" stop-color="#e87948"/>
+      <stop offset="0.62" stop-color="#f2a058"/>
+      <stop offset="1" stop-color="#f6b465"/>
+    </linearGradient>
+    <clipPath id="sun"><circle cx="117.5" cy="85" r="34.6"/></clipPath>
+    <clipPath id="tile"><rect x="6" y="6" width="244" height="244" rx="54"/></clipPath>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+      <feOffset dx="-1" dy="4" result="b"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.55"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect x="0" y="0" width="256" height="256" fill="url(#sky)"/>
+    <circle cx="117.5" cy="85" r="34.6" fill="#ffe6a2"/>
+    <g clip-path="url(#sun)" stroke="#eb9c5d" stroke-width="2.2" stroke-linecap="round">
+      <line x1="103.31" y1="79.55" x2="134.08" y2="54.63"/><line x1="115.12" y1="69.99" x2="152.09" y2="84.18"/><line x1="129.31" y1="75.43" x2="135.51" y2="114.54"/><line x1="131.69" y1="90.45" x2="100.92" y2="115.37"/><line x1="119.88" y1="100.01" x2="82.91" y2="85.82"/><line x1="105.69" y1="94.57" x2="99.49" y2="55.46"/>
+    </g>
+    <path fill="#5c3c60" d="M0,166 L6,163 L42,131 L72,150 L112,117 L148,150 L163,156 L196,135 L256,170 L256,256 L0,256 Z"/>
+    <path fill="#342848" d="M0,189 L6,187 L55,152 L100,181 L149,148 L172,163 L256,168 L256,256 L0,256 Z"/>
+    <path fill="#181a2e" d="M0,214 L6,212 L76,190 L142,210 L256,194 L256,256 L0,256 Z"/>
+    <g filter="url(#shadow)" stroke="#282c3c" stroke-width="4.2" stroke-linejoin="round" stroke-linecap="round">
+      <path fill="#f5f5f0" d="M167,236 L173,169 L190,146 L207,139 L246,166 L246,183 L225,208 Z"/>
+      <line x1="191" y1="147" x2="244" y2="180"/>
+      <line x1="205" y1="180" x2="169" y2="234"/>
+      <circle cx="205" cy="180" r="7.5" fill="#282c3c" stroke="none"/>
+    </g>
+  </g>
+</svg>
