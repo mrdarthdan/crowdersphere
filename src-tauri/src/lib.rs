@@ -222,6 +222,13 @@ async fn sync_scheduled(state: State<'_, AppState>) -> Res<Value> {
     logged("sync_scheduled", wp::sync_scheduled(&w, &root).await)
 }
 
+/// A picture from another website, as raw bytes, for the Word export.
+#[tauri::command]
+async fn remote_image(url: String) -> Res<tauri::ipc::Response> {
+    let bytes = logged("remote_image", wp::fetch_remote_image(&url).await)?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
 // ------------------------------------------------------------------ desktop helpers
 
 /// Show a post's folder (or the posts folder) in Explorer / Finder.
@@ -327,6 +334,15 @@ pub fn run() {
     ));
 
     tauri::Builder::default()
+        // Must be registered first: a second launch just brings the open window to the front,
+        // so two copies can never edit (and overwrite) the same post.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.unminimize();
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(state)
@@ -362,6 +378,7 @@ pub fn run() {
             add_category,
             publish,
             sync_scheduled,
+            remote_image,
             open_folder,
             browse_folder,
             open_url,

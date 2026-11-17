@@ -75,8 +75,8 @@
 
   /* ---------------- converter ---------------- */
   class Builder {
-    constructor(resolveSrc) {
-      this.resolveSrc = resolveSrc; this.rels = []; this.media = []; this.orderedLists = 0;
+    constructor(resolveSrc, fetchRemote) {
+      this.resolveSrc = resolveSrc; this.fetchRemote = fetchRemote; this.rels = []; this.media = []; this.orderedLists = 0;
       this.docPrId = 1; this.relHeight = 251658240; this.body = []; this.pendingAnchor = null;
     }
     rel(type, target, external) {
@@ -146,9 +146,16 @@
     }
     // ---- images
     async loadImage(src) {
-      const res = await fetch(this.resolveSrc(src));
-      if (!res.ok) throw new Error('image ' + res.status);
-      let blob = await res.blob();
+      const url = this.resolveSrc(src);
+      let blob;
+      // Pictures on other websites usually can't be fetched from the page (CORS), so the
+      // app downloads them for us when it can.
+      if (this.fetchRemote && isRemote(url)) blob = await this.fetchRemote(url);
+      else {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('image ' + res.status);
+        blob = await res.blob();
+      }
       const bmp = await createImageBitmap(blob);
       let ext = { 'image/jpeg': 'jpeg', 'image/png': 'png', 'image/gif': 'gif' }[blob.type];
       if (!ext) {   // e.g. WebP: Word can't always show it, so convert to PNG
@@ -283,9 +290,16 @@
     }
   }
 
-  async function buildDocx({ title, excerpt, html, resolveSrc, font }) {
+  function isRemote(url) {
+    try {
+      const u = new URL(url, location.href);
+      return /^https?:$/.test(u.protocol) && u.origin !== location.origin && u.hostname !== 'csfiles.localhost';
+    } catch (e) { return false; }
+  }
+
+  async function buildDocx({ title, excerpt, html, resolveSrc, font, fetchRemote }) {
     const doc = new DOMParser().parseFromString('<body>' + (html || '') + '</body>', 'text/html');
-    const b = new Builder(resolveSrc || (s => s));
+    const b = new Builder(resolveSrc || (s => s), fetchRemote);
     if (title) b.body.push(b.para(b.run(title, {}), { style: 'Title' }));
     if (excerpt && excerpt.trim()) b.body.push(b.para(b.run(excerpt.trim(), {}), { style: 'Subtitle' }));
     for (const n of Array.from(doc.body.childNodes)) await b.block(n);

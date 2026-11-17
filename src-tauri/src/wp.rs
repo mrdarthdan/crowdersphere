@@ -55,6 +55,40 @@ fn client() -> reqwest::Client {
         .expect("HTTP client")
 }
 
+/// Download a picture from another website, for the Word export. The editor page can't
+/// fetch it itself because browsers block cross-site downloads that the site doesn't allow (CORS).
+pub async fn fetch_remote_image(url: &str) -> Res<Vec<u8>> {
+    const MAX: usize = 40 * 1024 * 1024;
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("Only web (http/https) pictures can be downloaded.".into());
+    }
+    let resp = client()
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("Couldn't download {url}: {}", error_chain(&e)))?;
+    if !resp.status().is_success() {
+        return Err(format!("Couldn't download {url}: HTTP {}", resp.status().as_u16()));
+    }
+    let ct = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_lowercase();
+    if !ct.is_empty() && !ct.starts_with("image/") && !ct.starts_with("application/octet-stream") {
+        return Err(format!("{url} isn't a picture ({ct})"));
+    }
+    if resp.content_length().is_some_and(|n| n as usize > MAX) {
+        return Err(format!("{url} is too large to include"));
+    }
+    let bytes = resp.bytes().await.map_err(|e| format!("Couldn't download {url}: {e}"))?;
+    if bytes.len() > MAX {
+        return Err(format!("{url} is too large to include"));
+    }
+    Ok(bytes.to_vec())
+}
+
 pub fn html_decode(s: &str) -> String {
     html_escape::decode_html_entities(s).into_owned()
 }

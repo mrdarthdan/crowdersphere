@@ -71,6 +71,30 @@
     catch (e) { throw (e instanceof Error ? e : new Error(String(e))); }
   }
 
+  // Tell picture formats apart by their first bytes (the app sends raw bytes without a type)
+  function sniffImageType(b) {
+    if (b[0] === 0xFF && b[1] === 0xD8) return 'image/jpeg';
+    if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47) return 'image/png';
+    if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return 'image/gif';
+    if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return 'image/webp';
+    return 'application/octet-stream';
+  }
+
+  // Download a picture from another website, for the Word export. Pages can't usually fetch
+  // these themselves (CORS), so the back end does it. token: the PowerShell server's session token.
+  async function remoteImage(url, token) {
+    let bytes;
+    if (tauri) {
+      try { bytes = new Uint8Array(await T.core.invoke('remote_image', { url })); }
+      catch (e) { throw (e instanceof Error ? e : new Error(String(e))); }
+    } else {
+      const res = await fetch('/api/remote-image?url=' + encodeURIComponent(url), { headers: { 'X-Token': token || '' } });
+      if (!res.ok) { let m = 'HTTP ' + res.status; try { m = (await res.json()).error || m; } catch (e) {} throw new Error(m); }
+      bytes = new Uint8Array(await res.arrayBuffer());
+    }
+    return new Blob([bytes], { type: sniffImageType(bytes) });
+  }
+
   // Desktop app: the window asks the editor to save before it closes
   function onCloseRequested(save) {
     if (!tauri || !T.event) return;
@@ -80,5 +104,5 @@
     });
   }
 
-  window.CS = { tauri, api, fileUrl, filesBase, relFromUrl, onCloseRequested };
+  window.CS = { tauri, api, fileUrl, filesBase, relFromUrl, onCloseRequested, remoteImage };
 })();
