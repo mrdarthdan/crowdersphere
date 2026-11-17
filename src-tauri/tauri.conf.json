@@ -1,7 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "CrowderSphere",
-  "version": "1.6.0",
   "identifier": "blog.dancrowder.crowdersphere",
   "build": {
     "frontendDist": "../app/ui"
@@ -54,6 +53,10 @@
       "nsis": {
         "installMode": "currentUser"
       }
+    },
+    "macOS": {
+      "signingIdentity": "-",
+      "minimumSystemVersion": "10.15"
     }
   }
 }
