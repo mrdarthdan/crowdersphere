@@ -51,7 +51,11 @@ http.createServer(async (req, res) => {
         if (req.method === 'POST') {
           const b = JSON.parse((await body(req)).toString());
           let id = b.id;
-          if (!id) { id = new Date().toISOString().slice(0, 10) + '-' + slug(b.meta && b.meta.title); fs.mkdirSync(path.join(postsDir, id, 'images'), { recursive: true }); }
+          if (!id) {
+            const base = new Date().toISOString().slice(0, 10) + '-' + slug(b.meta && b.meta.title);
+            id = base; for (let n = 2; fs.existsSync(path.join(postsDir, id)); n++) id = `${base}-${n}`;   // like the app
+            fs.mkdirSync(path.join(postsDir, id, 'images'), { recursive: true });
+          }
           const dir = path.join(postsDir, id);
           const m = Object.assign({ categories: [], media: {}, created: now() }, meta(dir), b.meta || {}, { modified: now() });
           if ('html' in b) fs.writeFileSync(path.join(dir, 'post.html'), b.html || '');
@@ -70,7 +74,9 @@ http.createServer(async (req, res) => {
         fs.writeFileSync(path.join(dir, f), await body(req));
         return send(res, 200, { src: 'images/' + f });
       }
-      case '/api/categories': return send(res, 200, req.method === 'POST' ? { id: 99, name: 'New', parent: 0 } : { categories: [] });
+      // a connected site has a few example categories (for screenshots); otherwise none
+      case '/api/categories': return send(res, 200, req.method === 'POST' ? { id: 99, name: 'New', parent: 0 }
+        : { categories: settings.siteUrl ? ['Desert', 'Hiking', 'Photography', 'Travel'].map((name, i) => ({ id: i + 1, name, parent: 0 })) : [] });
       case '/api/sync-scheduled': return send(res, 200, { changed: [] });
       case '/api/remote-image': {
         const r = await fetch(q.get('url'));
