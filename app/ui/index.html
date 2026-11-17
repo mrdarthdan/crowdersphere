@@ -26,6 +26,7 @@
 :root[data-theme=dark] #editor figure img{filter:brightness(.95)}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
+svg.sprite{position:absolute;width:0;height:0;overflow:hidden}
 body{font:14px/1.45 "Segoe UI",system-ui,sans-serif;color:var(--ink);background:var(--bg);overflow:hidden}
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer;border:1px solid var(--line);background:var(--paper);border-radius:7px;padding:6px 12px}
@@ -208,7 +209,7 @@ ol.steps{padding-left:20px;margin:6px 0;font-size:13px;color:var(--muted)}
 </style>
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute">
+<svg class="sprite" width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
     <symbol id="i-ul" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4.5" cy="6" r="1" fill="currentColor"/><circle cx="4.5" cy="12" r="1" fill="currentColor"/><circle cx="4.5" cy="18" r="1" fill="currentColor"/></symbol>
     <symbol id="i-ol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="10" y1="6" x2="20" y2="6"/><line x1="10" y1="12" x2="20" y2="12"/><line x1="10" y1="18" x2="20" y2="18"/><path d="M4 4.5h1.5V9M4 9h3M4 14.5c.5-.8 2.8-.9 2.8.6 0 1-2.8 2-2.8 3.4h3" stroke-width="1.5"/></symbol>

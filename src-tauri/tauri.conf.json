@@ -29,7 +29,10 @@
         "font-src": "'self' data:",
         "connect-src": "'self' ipc: http://ipc.localhost csfiles: http://csfiles.localhost https: data: blob:",
         "frame-src": "'self' about: blob: data:"
-      }
+      },
+      "dangerousDisableAssetCspModification": [
+        "style-src"
+      ]
     }
   },
   "bundle": {
