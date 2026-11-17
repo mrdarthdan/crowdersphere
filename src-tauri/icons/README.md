@@ -8,4 +8,4 @@ To regenerate the other files after changing it (from the repository root):
 npx @tauri-apps/cli icon src-tauri/icons/icon.svg
 ```
 
-and copy `src-tauri/icons/icon.ico` to `app/ui/favicon.ico` (the editor's logo) and `app/crowdersphere.ico` (version 1).
+and copy `src-tauri/icons/icon.ico` to `ui/favicon.ico` (the editor's sidebar logo).

@@ -1,5 +1,5 @@
 // Everything the editor page needs from TipTap/ProseMirror, exposed as window.TT.
-// The editor's own nodes and wiring live in app/ui/editor.js so they can change without a rebuild.
+// The editor's own nodes and wiring live in ui/editor.js so they can change without a rebuild.
 import * as core from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import TextAlign from '@tiptap/extension-text-align';

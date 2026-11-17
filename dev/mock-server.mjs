@@ -7,10 +7,9 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-const UI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'app', 'ui');
+const UI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'ui');
 const postsDir = path.resolve(process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'cs-posts-')));
 const port = +(process.argv[3] || 47999);
-const TOKEN = 'dev';
 fs.mkdirSync(postsDir, { recursive: true });
 let settings = { siteUrl: '', username: '', hasPassword: false, postsDir, maxImageWidth: 1920, version: 'dev', prefs: {} };
 
@@ -29,7 +28,7 @@ function send(res, code, data, type = 'application/json') {
 http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x'), q = u.searchParams, p = u.pathname;
   try {
-    if (p === '/' || p === '/index.html') return send(res, 200, fs.readFileSync(path.join(UI, 'index.html'), 'utf8').replace('__API_TOKEN__', TOKEN), 'text/html');
+    if (p === '/' || p === '/index.html') return send(res, 200, fs.readFileSync(path.join(UI, 'index.html'), 'utf8'), 'text/html');
     if (/^\/((vendor\/)?[a-z0-9-]+\.(js|ico))$/.test(p)) return send(res, 200, fs.readFileSync(path.join(UI, p)), MIME[path.extname(p)]);
     if (p.startsWith('/files/')) {
       const [id, d, f] = p.slice(7).split('/').map(decodeURIComponent);
@@ -40,7 +39,6 @@ http.createServer(async (req, res) => {
     if (p === '/remote.png') return send(res, 200, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64'), 'image/png');
     if (!p.startsWith('/api/')) return send(res, 404, 'Not found', 'text/plain');
     switch (p) {
-      case '/api/heartbeat': case '/api/bye': return send(res, 200, { ok: true });
       case '/api/settings':
         if (req.method === 'POST') Object.assign(settings, JSON.parse((await body(req)).toString() || '{}'));
         return send(res, 200, settings);

@@ -1,6 +1,5 @@
-# Windows scripts need CRLF line endings
-*.ps1 text eol=crlf
-*.cmd text eol=crlf
-*.cs  text eol=crlf
-*.txt text eol=crlf
+# Let Git normalize line endings; binary assets are left alone
+* text=auto
 *.ico binary
+*.icns binary
+*.png binary

@@ -379,7 +379,6 @@ ol.steps{padding-left:20px;margin:6px 0;font-size:13px;color:var(--muted)}
 <script src="/editor.js"></script>
 <script>
 "use strict";
-const TOKEN = "__API_TOKEN__";
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const editor = $('#editor'), source = $('#source'), titleEl = $('#title');
@@ -487,7 +486,7 @@ function toast(msg, kind = '') {
 }
 async function api(path, opts = {}) {
   if (CS.tauri) return CS.api(path, opts);
-  const init = { method: opts.method || (opts.json !== undefined || opts.body !== undefined ? 'POST' : 'GET'), headers: { 'X-Token': TOKEN } };
+  const init = { method: opts.method || (opts.json !== undefined || opts.body !== undefined ? 'POST' : 'GET'), headers: {} };
   if (opts.json !== undefined) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(opts.json); }
   else if (opts.body !== undefined) init.body = opts.body;
   if (opts.keepalive) init.keepalive = true;
@@ -1162,7 +1161,7 @@ $('#exportBtn').addEventListener('click', async () => {
   try {
     await ensureSaved(); await flushSave();
     const cur = state.current, m = cur.meta;
-    const blob = await window.buildDocx({ title: m.title || 'Untitled', excerpt: m.excerpt, html: currentHtml(), font: prefs.exportFont ? firstFamily(fontStack(prefs.font)) : 'Georgia', resolveSrc: s => /^images\//.test(s) ? fileUrl(s) : s, fetchRemote: url => CS.remoteImage(url, TOKEN) });
+    const blob = await window.buildDocx({ title: m.title || 'Untitled', excerpt: m.excerpt, html: currentHtml(), font: prefs.exportFont ? firstFamily(fontStack(prefs.font)) : 'Georgia', resolveSrc: s => /^images\//.test(s) ? fileUrl(s) : s, fetchRemote: url => CS.remoteImage(url) });
     const name = exportName();
     const q = 'id=' + encodeURIComponent(cur.id) + '&name=' + encodeURIComponent(name);
     const r = await api('/api/export?' + q, { body: blob });
@@ -1366,17 +1365,8 @@ document.addEventListener('keydown', e => {
   if (e.ctrlKey && e.key.toLowerCase() === 'k' && editor.contains(document.activeElement || editor)) { e.preventDefault(); insertLink(); }
   if (e.ctrlKey && e.key.toLowerCase() === 'n') { e.preventDefault(); newPost(); }
 });
-if (!CS.tauri) setInterval(() => { api('/api/heartbeat', { method: 'POST' }).catch(() => {}); }, 20000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && state.dirty) save(); });
 CS.onCloseRequested(flushSave);
-addEventListener('pagehide', () => {
-  if (CS.tauri) return;   // the desktop app saves through onCloseRequested instead
-  if (state.dirty && state.current && state.current.id) {
-    const m = state.current.meta;
-    try { fetch('/api/post', { method: 'POST', keepalive: true, headers: { 'X-Token': TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ id: state.current.id, html: currentHtml(), meta: { title: m.title, excerpt: m.excerpt, categories: m.categories, tags: m.tags, featured: m.featured } }) }); } catch (e) {}
-  }
-  navigator.sendBeacon('/api/bye?t=' + TOKEN, '');
-});
 
 let wasNarrow = innerWidth < 1000;
 addEventListener('resize', () => {

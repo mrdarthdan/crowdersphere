@@ -2,7 +2,8 @@
  *
  *  - Desktop app (Tauri): calls the Rust commands in src-tauri through Tauri's IPC, and loads
  *    pictures through the private csfiles: protocol.
- *  - Original PowerShell version: calls the local web server at /api/... as before.
+ *  - In a normal browser (dev/mock-server.mjs, used for development and the browser test):
+ *    calls the stand-in server's /api/... routes.
  *
  * The editor only uses CS.api(), CS.fileUrl(), CS.relFromUrl() and CS.onCloseRequested(),
  * so it doesn't need to know which one it is on.
@@ -60,8 +61,6 @@
       case '/api/open':           return invoke('open_folder', { id: q.get('id') || null });
       case '/api/browse':         return invoke('browse_folder', { start: q.get('start') || null });
       case '/api/openurl':        return invoke('open_url', { url: q.get('url') || '' });
-      case '/api/heartbeat':
-      case '/api/bye':            return { ok: true };   // only the PowerShell version needs these
       default: throw new Error('Unknown API call ' + url.pathname);
     }
   }
@@ -81,14 +80,14 @@
   }
 
   // Download a picture from another website, for the Word export. Pages can't usually fetch
-  // these themselves (CORS), so the back end does it. token: the PowerShell server's session token.
-  async function remoteImage(url, token) {
+  // these themselves (CORS), so the back end does it.
+  async function remoteImage(url) {
     let bytes;
     if (tauri) {
       try { bytes = new Uint8Array(await T.core.invoke('remote_image', { url })); }
       catch (e) { throw (e instanceof Error ? e : new Error(String(e))); }
     } else {
-      const res = await fetch('/api/remote-image?url=' + encodeURIComponent(url), { headers: { 'X-Token': token || '' } });
+      const res = await fetch('/api/remote-image?url=' + encodeURIComponent(url), {});
       if (!res.ok) { let m = 'HTTP ' + res.status; try { m = (await res.json()).error || m; } catch (e) {} throw new Error(m); }
       bytes = new Uint8Array(await res.arrayBuffer());
     }

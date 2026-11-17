@@ -16,7 +16,7 @@ Download the installer for your computer from the [latest release](https://githu
 
 **Uninstalling:** on Windows, go to **Settings → Apps → Installed apps → CrowderSphere → Uninstall**. On a Mac, drag CrowderSphere from Applications to the Trash. Your posts are never deleted.
 
-**Coming from version 1 (the Setup.cmd version)?** Install version 2, then uninstall the old copy from **Installed apps**. Your posts, settings and WordPress password carry over automatically.
+**Coming from version 1 (the Setup.cmd version)?** Just install version 2. Your posts, settings and WordPress password carry over, and the installer removes the old version's program files and points an old desktop shortcut at the new app.
 
 ## Connect your blog (one time)
 
@@ -102,11 +102,11 @@ CrowderSphere works with self-hosted WordPress (WordPress 5.6 or newer). It also
 CrowderSphere is a [Tauri 2](https://tauri.app) app: the editor is a web page shown in the system's own web view, and the back end is written in Rust.
 
 ```
-app/ui/        the editor (HTML/JS); editor.js sets up TipTap, bridge.js talks to the back end
+ui/            the editor (HTML/JS); editor.js sets up TipTap, bridge.js talks to the back end
 src-tauri/     the back end (Rust): posts on disk, WordPress REST API, settings
-editor/        builds app/ui/vendor/tiptap.js (TipTap and ProseMirror) in CI
+editor/        builds ui/vendor/tiptap.js (TipTap and ProseMirror) in CI
 dev/           a stand-in back end for running the editor in a browser, and its browser test
-app/*.ps1      version 1 (PowerShell), kept until everyone has moved to version 2
+src-tauri/windows/  installer additions (cleans up version 1 on Windows)
 ```
 
 To build it you need [Rust](https://rustup.rs), Node.js 18+, and on Linux the [Tauri system packages](https://tauri.app/start/prerequisites/). Then, from the repository root:

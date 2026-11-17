@@ -1,6 +1,6 @@
 //! CrowderSphere desktop app (Tauri 2).
 //!
-//! The editor (app/ui) runs in the system web view. It calls the commands below through
+//! The editor (ui/) runs in the system web view. It calls the commands below through
 //! Tauri's IPC; nothing listens on a network port. Pictures are shown to the editor through
 //! the private `csfiles:` protocol, which only serves files from a post's images folder.
 
