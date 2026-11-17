@@ -98,6 +98,7 @@ label.field>span{display:block;font-size:12px;font-weight:600;color:var(--muted)
 #editor .html-block pre{margin:0;padding:0;background:none;font:12px/1.4 Consolas,monospace;white-space:pre-wrap;word-break:break-all;max-height:6em;overflow:hidden}
 #editor .html-block.ProseMirror-selectednode{outline:3px solid var(--accent);outline-offset:3px}
 #editor blockquote p:last-child{margin-bottom:0}
+.update-notes{white-space:pre-wrap;max-height:220px;overflow:auto;background:var(--soft);border-radius:8px;padding:10px 12px;font-size:13px;margin:8px 0}
 #source{zoom:var(--zoom,1);display:block;width:100%;padding:24px;font:13px/1.55 Consolas,"Cascadia Mono",monospace;border:none;resize:none;min-height:70vh;color:var(--text)}
 #editor h2{font-size:1.6em;line-height:1.25;margin:1.2em 0 .5em}
 #editor h3{font-size:1.3em;margin:1.1em 0 .4em}
@@ -403,7 +404,7 @@ const FONTS = [
   ['Courier New', '"Courier New", Courier, monospace'],
   ['Consolas', 'Consolas, "Courier New", monospace']
 ];
-const DEFAULT_PREFS = { theme: 'light', font: 'Georgia', fontSize: 18, spellcheck: true, exportFont: true, zoom: 1, pageWidth: 'fill' };
+const DEFAULT_PREFS = { theme: 'light', font: 'Georgia', fontSize: 18, spellcheck: true, exportFont: true, zoom: 1, pageWidth: 'fill', autoUpdate: true };
 const PAGE_WIDTHS = { fill: 'none', wide: '1100px', reading: '780px' };
 let prefs = Object.assign({}, DEFAULT_PREFS, (() => { try { return JSON.parse(localStorage.getItem('bw-prefs') || '{}'); } catch (e) { return {}; } })());
 const darkMQ = matchMedia('(prefers-color-scheme: dark)');
@@ -1281,7 +1282,7 @@ function openSettings() {
     <label class="field"><span>WordPress username</span><input type="text" id="sUser" value="${esc(s.username)}" autocomplete="off"></label>
     <label class="field"><span>Application password</span><input type="password" id="sPass" placeholder="${s.hasPassword ? 'Saved (leave blank to keep it)' : 'xxxx xxxx xxxx xxxx xxxx xxxx'}" autocomplete="new-password">
       <div class="hint">This is <b>not</b> your normal login password. To make one:</div>
-      <ol class="steps"><li>Log in to WordPress and go to <b>Users &rarr; Profile</b>.</li><li>Scroll to <b>Application Passwords</b>, type "CrowderSphere" and click <b>Add New Application Password</b>.</li><li>Copy the code it shows and paste it here. It's stored encrypted under your Windows account.</li></ol>
+      <ol class="steps"><li>Log in to WordPress and go to <b>Users &rarr; Profile</b>.</li><li>Scroll to <b>Application Passwords</b>, type "CrowderSphere" and click <b>Add New Application Password</b>.</li><li>Copy the code it shows and paste it here. It's kept in your computer's password store.</li></ol>
     </label>
     <div class="row" style="margin-bottom:14px"><button id="sTest">Save &amp; test connection</button><span id="sTestRes" style="font-size:13px"></span></div>
     <label class="field"><span>Folder for posts on this computer</span><div class="row"><input type="text" id="sDir" value="${esc(s.postsDir)}"><button id="sBrowse">Browse...</button></div>
@@ -1300,10 +1301,13 @@ function openSettings() {
     <label class="field" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="pExport"> Use the writing font in Word exports</label>
     <label class="field" style="display:flex;gap:8px;align-items:center;margin-bottom:4px"><input type="checkbox" id="pSpell"> Check spelling as I type</label>
     <div class="hint" style="margin-bottom:12px">Misspelled words get a red underline. Right-click one for suggestions or "Add to dictionary". Spelling languages, and Microsoft Editor grammar checking, are set in Edge under Settings &rarr; Languages.</div>
+    ${CS.tauri ? `<div class="section-title">Updates</div>
+    <label class="field" style="display:flex;gap:8px;align-items:center;margin-bottom:4px"><input type="checkbox" id="pAuto"> Check for updates when CrowderSphere starts</label>
+    <div class="row" style="margin-bottom:12px"><button id="sCheckUpd">Check for updates now</button><span id="sUpdRes" style="font-size:13px"></span></div>` : ''}
     <div class="hint" style="text-align:right">CrowderSphere ${esc(s.version || '')}</div>`;
   const before = Object.assign({}, prefs);
   let saved = false;
-  const readPrefs = el => ({ theme: $('#pTheme', el).value, font: $('#pFont', el).value, fontSize: +$('#pSize', el).value, pageWidth: $('#pWidth', el).value, zoom: +$('#pZoom', el).value, exportFont: $('#pExport', el).checked, spellcheck: $('#pSpell', el).checked });
+  const readPrefs = el => ({ theme: $('#pTheme', el).value, font: $('#pFont', el).value, fontSize: +$('#pSize', el).value, pageWidth: $('#pWidth', el).value, zoom: +$('#pZoom', el).value, exportFont: $('#pExport', el).checked, spellcheck: $('#pSpell', el).checked, autoUpdate: $('#pAuto', el) ? $('#pAuto', el).checked : prefs.autoUpdate !== false });
   const collect = el => ({ siteUrl: $('#sSite', el).value.trim(), username: $('#sUser', el).value.trim(), appPassword: $('#sPass', el).value, postsDir: $('#sDir', el).value.trim(), maxImageWidth: +$('#sMax', el).value || 1920, prefs: readPrefs(el) });
   const saveIt = async el => {
     const beforeDir = state.settings && state.settings.postsDir;
@@ -1320,6 +1324,18 @@ function openSettings() {
     $('#pTheme', el).value = prefs.theme; $('#pFont', el).value = prefs.font; $('#pSize', el).value = String(prefs.fontSize);
     $('#pExport', el).checked = !!prefs.exportFont; $('#pSpell', el).checked = !!prefs.spellcheck;
     $('#pWidth', el).value = prefs.pageWidth || 'fill';
+    if ($('#pAuto', el)) {
+      $('#pAuto', el).checked = prefs.autoUpdate !== false;
+      $('#sCheckUpd', el).onclick = async () => {
+        const res = $('#sUpdRes', el);
+        res.innerHTML = '<span class="spinner"></span>Checking...';
+        try {
+          const r = await CS.checkUpdate();
+          if (r.available) { res.textContent = ''; offerUpdate(r); }
+          else res.innerHTML = `<span class="result-ok">&#10003; You have the latest version (${esc(r.current)}).</span>`;
+        } catch (e) { res.innerHTML = `<span class="result-bad">${esc(e.message)}</span>`; }
+      };
+    }
     const zSel = $('#pZoom', el), zv = +prefs.zoom || 1;
     if (![...zSel.options].some(o => +o.value === zv)) zSel.insertAdjacentHTML('beforeend', `<option value="${zv}">${Math.round(zv * 100)}%</option>`);
     zSel.value = String(zv);
@@ -1380,6 +1396,39 @@ $('#panelClose').addEventListener('click', () => { $('#panel').classList.add('hi
     else { loadCategories(false); syncScheduled(); setInterval(syncScheduled, 5 * 60 * 1000); }
   } catch (e) { toast(e.message, 'error'); }
 })();
+/* ------------------------------------------------------------------ updates */
+// The desktop app checks GitHub for a newer release shortly after it starts (unless turned off in Settings).
+function offerUpdate(r) {
+  const notes = (r.notes || '').trim();
+  openModal({ title: 'Update available', body: `<p>CrowderSphere <b>${esc(r.version)}</b> is available. You have ${esc(r.current)}.</p>
+      ${notes ? `<div class="update-notes">${esc(notes.length > 1500 ? notes.slice(0, 1500) + '…' : notes)}</div>` : ''}
+      <p class="hint">Your post is saved first. CrowderSphere closes, installs the update, and opens again.</p>
+      <div id="updProgress" class="hint"></div>`,
+    buttons: [
+      { label: 'Later' },
+      { label: 'Update now', primary: true, action: async el => {
+        const prog = $('#updProgress', el);
+        for (const b of $$('footer button', el)) b.disabled = true;
+        try {
+          await flushSave();
+          prog.innerHTML = '<span class="spinner"></span>Downloading the update...';
+          await CS.installUpdate(f => { if (f != null) prog.innerHTML = `<span class="spinner"></span>Downloading the update... ${Math.round(f * 100)}%`; });
+          prog.innerHTML = '<span class="spinner"></span>Installing...';
+        } catch (e) {
+          prog.innerHTML = `<span class="result-bad">${esc(e.message)}</span>`;
+          for (const b of $$('footer button', el)) b.disabled = false;
+        }
+        return false;   // keep the window open; the app restarts when the update is in
+      } }
+    ] });
+}
+async function checkForUpdatesQuietly() {
+  if (!CS.tauri || prefs.autoUpdate === false) return;
+  try { const r = await CS.checkUpdate(); if (r.available) offerUpdate(r); }
+  catch (e) { /* offline, or this kind of install (e.g. a Linux .deb) updates through the system: stay quiet */ }
+}
+setTimeout(checkForUpdatesQuietly, 4000);
+
 // Scheduled posts go live on WordPress by themselves; catch the list up once their time has passed
 async function syncScheduled() {
   if (!state.posts.some(p => p.wpStatus === 'future')) return;

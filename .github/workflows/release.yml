@@ -7,6 +7,8 @@
 # Signing is optional and switches on by itself when its secrets exist (see SIGNING.md):
 #   Windows: Azure Artifact Signing (AZURE_*) or SignPath (SIGNPATH_*)
 #   macOS:   Apple Developer ID + notarization (APPLE_*)
+# Automatic updates need the update signing key (TAURI_SIGNING_PRIVATE_KEY and _PASSWORD); with it,
+# each release also gets latest.json and .sig files that installed copies use to update themselves.
 # Without them the installers are built unsigned, exactly like the Build workflow.
 
 name: Release
@@ -40,6 +42,7 @@ jobs:
       HAS_AZURE: ${{ secrets.AZURE_CLIENT_ID != '' }}
       HAS_APPLE: ${{ secrets.APPLE_CERTIFICATE != '' }}
       HAS_SIGNPATH: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
+      HAS_UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -72,6 +75,14 @@ jobs:
 
       - name: Unit tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      # ---- Update files (latest.json + .sig), signed with the update key
+      - name: Set up update signing
+        if: env.HAS_UPDATER_KEY == 'true'
+        shell: bash
+        run: |
+          echo '{ "bundle": { "createUpdaterArtifacts": true } }' > src-tauri/tauri.updater.conf.json
+          echo "UPDATER_ARGS=--config src-tauri/tauri.updater.conf.json" >> "$GITHUB_ENV"
 
       # ---- Windows signing with Azure Artifact Signing (formerly Trusted Signing)
       - name: Set up Azure Artifact Signing
@@ -106,9 +117,11 @@ jobs:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tauriScript: npx --yes @tauri-apps/cli@^2
-          args: ${{ matrix.args }} ${{ env.SIGN_ARGS }}
+          args: ${{ matrix.args }} ${{ env.SIGN_ARGS }} ${{ env.UPDATER_ARGS }}
           tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v__VERSION__' }}
           releaseName: CrowderSphere ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v__VERSION__' }}
           releaseBody: |
@@ -163,3 +176,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload "v$APP_VERSION" signed/*.exe --clobber
+      # The update signature was made for the unsigned installer; sign the SignPath-signed one again
+      # and point latest.json at the new signature, or installed copies would reject the update.
+      - name: Re-sign the update for the signed installer
+        if: matrix.name == 'windows' && env.HAS_SIGNPATH == 'true' && env.HAS_AZURE != 'true' && env.HAS_UPDATER_KEY == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          exe=$(ls signed/*.exe | head -1)
+          npx --yes @tauri-apps/cli@^2 signer sign "$exe"
+          gh release upload "v$APP_VERSION" "$exe.sig" --clobber
+          gh release download "v$APP_VERSION" -p latest.json -D upd
+          node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('upd/latest.json'));const sig=fs.readFileSync(process.argv[1],'utf8').trim();for(const k of Object.keys(j.platforms))if(k.startsWith('windows'))j.platforms[k].signature=sig;fs.writeFileSync('upd/latest.json',JSON.stringify(j,null,2));" "$exe.sig"
+          gh release upload "v$APP_VERSION" upd/latest.json --clobber

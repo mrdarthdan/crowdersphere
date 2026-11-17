@@ -12,7 +12,7 @@ Download the installer for your computer from the [latest release](https://githu
 - **Mac:** `CrowderSphere_<version>_universal.dmg`, which works on Intel and Apple silicon Macs. Open it and drag CrowderSphere to Applications. The Mac app isn't signed by Apple yet, so the first time, right-click the app and choose **Open**.
 - **Linux:** the `.AppImage`, or the `.deb` (Debian, Ubuntu) or `.rpm` (Fedora) package.
 
-**Updating:** install the newer version over the old one. Your posts and WordPress connection are kept.
+**Updating:** CrowderSphere checks for a new version when it starts and offers to install it (you can turn this off, or check by hand, in **Settings → Updates**). You can also install a newer version over the old one. Either way, your posts and WordPress connection are kept. Linux `.deb` and `.rpm` installs update through their package files instead.
 
 **Uninstalling:** on Windows, go to **Settings → Apps → Installed apps → CrowderSphere → Uninstall**. On a Mac, drag CrowderSphere from Applications to the Trash. Your posts are never deleted.
 

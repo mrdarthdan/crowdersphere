@@ -52,6 +52,26 @@ This requires the Apple Developer Program ($99 a year). Without it, Mac builds a
    - `APPLE_SIGNING_IDENTITY`: for example `Developer ID Application: Daniel Crowder (TEAMID)`
    - `APPLE_ID`, `APPLE_PASSWORD` (the app-specific password), `APPLE_TEAM_ID`
 
+## Automatic updates: the update key
+
+Installed copies of CrowderSphere update themselves from GitHub Releases. Each update is signed with a private **update key**, and the app only installs updates signed with it, so nobody else can push an update to CrowderSphere users. This is separate from code signing.
+
+**Create the key once, on your own computer** (needs [Node.js](https://nodejs.org)). In PowerShell:
+
+```
+npx @tauri-apps/cli signer generate -w "$HOME\.tauri\crowdersphere.key"
+```
+
+Choose a strong password when asked. It writes two files:
+- `crowdersphere.key`: the **private key**. Keep it secret and back it up together with its password (for example in your password manager). If it's lost, existing installs can't receive updates any more.
+- `crowdersphere.key.pub`: the **public key**. Safe to share; it goes in `src-tauri/tauri.conf.json` under `plugins.updater.pubkey`.
+
+**Add two GitHub secrets:**
+- `TAURI_SIGNING_PRIVATE_KEY`: the whole contents of `crowdersphere.key`
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: its password
+
+From then on every release also gets `latest.json` and `.sig` files, and the app offers the update to everyone on an earlier version once the release is **published** (drafts aren't offered).
+
 ## Making a release
 
 1. Change `version` in `src-tauri/Cargo.toml` (for example to `1.7.0`) and commit.

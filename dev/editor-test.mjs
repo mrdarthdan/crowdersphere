@@ -208,6 +208,16 @@ console.log('Word export');
   check(remote.media > 0, 'includes a picture hosted on another website (#6)', JSON.stringify(remote));
 }
 
+console.log('Update prompt');
+{
+  await page.evaluate(() => offerUpdate({ available: true, version: '9.9.9', current: '2.0.1', notes: 'Fixes <b>things</b>' }));
+  await page.waitForSelector('#modalBack:not([hidden])');
+  const t = await page.evaluate(() => $('#modalBack').innerText);
+  check(/9\.9\.9/.test(t) && /2\.0\.1/.test(t) && /Update now/.test(t) && t.includes('Fixes <b>things</b>'), 'shows the new version, notes as plain text, and Update now', t.slice(0, 200));
+  await page.click('#modalBack button:not(.primary)');
+  check(await page.evaluate(() => $('#modalBack').hidden), 'Later closes it');
+}
+
 console.log('New post and switching posts');
 {
   await page.click('#newPost');
