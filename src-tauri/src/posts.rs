@@ -122,7 +122,7 @@ fn normalize_array(v: &Value) -> Value {
     match v {
         Value::Array(_) => v.clone(),
         Value::Null => json!([]),
-        Value::Object(o) if o.get("value").map_or(false, Value::is_array) => o["value"].clone(),
+        Value::Object(o) if o.get("value").is_some_and(Value::is_array) => o["value"].clone(),
         other => json!([other]),
     }
 }
@@ -140,7 +140,7 @@ pub fn load_meta(dir: &Path) -> Map<String, Value> {
             m.insert(k, v);
         }
     }
-    if !m.get("media").map_or(false, Value::is_object) {
+    if !m.get("media").is_some_and(Value::is_object) {
         m.insert("media".into(), json!({}));
     }
     let cats = normalize_array(&m["categories"]);
@@ -179,7 +179,7 @@ pub fn list_posts(root: &Path) -> Res<Vec<Value>> {
             "published": m["published"], "scheduled": m["scheduled"],
         }));
     }
-    out.sort_by(|a, b| str_of(b.get("modified")).cmp(&str_of(a.get("modified"))));
+    out.sort_by_key(|p| std::cmp::Reverse(str_of(p.get("modified"))));
     Ok(out)
 }
 

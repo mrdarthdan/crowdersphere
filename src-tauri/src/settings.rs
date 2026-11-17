@@ -51,7 +51,7 @@ impl Settings {
             raw.insert("postsDir".into(), json!(default_posts_dir()));
         }
         for k in ["siteUrl", "username"] {
-            if !raw.get(k).map_or(false, Value::is_string) {
+            if !raw.get(k).is_some_and(Value::is_string) {
                 raw.insert(k.into(), json!(""));
             }
         }

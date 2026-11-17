@@ -154,7 +154,7 @@ impl Wp {
         }
         // Some hosts print PHP notices before the JSON; skip to the first { or [
         let start = txt
-            .find(|c| c == '{' || c == '[')
+            .find(['{', '['])
             .ok_or_else(|| wp_err("WordPress sent back something that isn't API data. Is the site address right?"))?;
         serde_json::from_str(&txt[start..])
             .map_err(|e| wp_err(format!("WordPress sent back data CrowderSphere couldn't read: {e}")))
