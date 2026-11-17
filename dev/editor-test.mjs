@@ -48,7 +48,8 @@ const browser = await chromium.launch({ executablePath: process.env.CHROME || '/
 const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
 const errors = [];
 page.on('pageerror', e => errors.push(e.message));
-page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
+// (pictures hosted on other sites can't be fetched for the Word export; the export skips them)
+page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource|blocked by CORS/.test(m.text())) errors.push(m.text()); });
 await page.goto(`http://localhost:${PORT}/`);
 await page.waitForSelector('#editor .cs-doc');
 await page.waitForFunction(() => document.querySelector('#title').value === 'Old post');
