@@ -56,10 +56,10 @@ This requires the Apple Developer Program ($99 a year). Without it, Mac builds a
 
 Installed copies of CrowderSphere update themselves from GitHub Releases. Each update is signed with a private **update key**, and the app only installs updates signed with it, so nobody else can push an update to CrowderSphere users. This is separate from code signing.
 
-**Create the key once, on your own computer** (needs [Node.js](https://nodejs.org)):
+**Create the key once, on your own computer** (needs [Node.js](https://nodejs.org)). In PowerShell:
 
 ```
-npx @tauri-apps/cli signer generate -w "%USERPROFILE%\.tauri\crowdersphere.key"
+npx @tauri-apps/cli signer generate -w "$HOME\.tauri\crowdersphere.key"
 ```
 
 Choose a strong password when asked. It writes two files:
