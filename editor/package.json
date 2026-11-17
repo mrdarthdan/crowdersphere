@@ -1,0 +1,20 @@
+{
+  "name": "crowdersphere-editor-bundle",
+  "private": true,
+  "description": "Builds app/ui/vendor/tiptap.js: TipTap and ProseMirror in one file the editor page can load without a bundler.",
+  "license": "MIT",
+  "scripts": {
+    "build": "esbuild src/index.js --bundle --minify --format=iife --target=es2020 --legal-comments=linked --outfile=../app/ui/vendor/tiptap.js"
+  },
+  "devDependencies": {
+    "@tiptap/core": "^3",
+    "@tiptap/pm": "^3",
+    "@tiptap/starter-kit": "^3",
+    "@tiptap/extension-text-align": "^3",
+    "@tiptap/extension-text-style": "^3",
+    "@tiptap/extension-image": "^3",
+    "@tiptap/extension-table": "^3",
+    "@tiptap/extensions": "^3",
+    "esbuild": "^0.25"
+  }
+}
