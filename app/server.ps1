@@ -629,6 +629,17 @@ function Handle-Request($ctx) {
             $b = Read-JsonBody $ctx
             Send-Json $ctx (Publish-Post ([string]$b.id) ([string]$b.status) ([string]$b.html) ([string](Get-Prop $b 'scheduleAt' '')))
         }
+        '/api/remote-image' {
+            # A picture from another website, for the Word export (the page itself is blocked by CORS)
+            $u = [string]$q['url']
+            if ($u -notmatch '^https?://') { throw 'Only web pictures can be downloaded.' }
+            $wc = New-Object System.Net.WebClient
+            $wc.Headers['User-Agent'] = 'CrowderSphere/' + $AppVersion + ' (Windows)'
+            $bytes = $wc.DownloadData($u)
+            $ct = [string]$wc.ResponseHeaders['Content-Type']; if (-not $ct) { $ct = 'application/octet-stream' }
+            if ($ct -notmatch '^(image/|application/octet-stream)') { throw "That address isn't a picture." }
+            Send-Bytes $ctx $bytes $ct
+        }
         '/api/sync-scheduled' { Send-Json $ctx @{ changed = (Sync-Scheduled) } }
         '/api/open'       {
             $target = if ($q['id']) { Get-PostDir $q['id'] } else { Get-PostsRoot }

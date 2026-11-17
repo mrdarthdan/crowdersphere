@@ -36,6 +36,8 @@ http.createServer(async (req, res) => {
       if (!safe(id) || d !== 'images' || !safe(f)) return send(res, 404, '', 'text/plain');
       return send(res, 200, fs.readFileSync(path.join(postsDir, id, 'images', f)), MIME[path.extname(f)] || 'application/octet-stream');
     }
+    // a stand-in for a picture on another website (no CORS headers), for the Word export test
+    if (p === '/remote.png') return send(res, 200, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64'), 'image/png');
     if (!p.startsWith('/api/')) return send(res, 404, 'Not found', 'text/plain');
     switch (p) {
       case '/api/heartbeat': case '/api/bye': return send(res, 200, { ok: true });
@@ -72,6 +74,11 @@ http.createServer(async (req, res) => {
       }
       case '/api/categories': return send(res, 200, req.method === 'POST' ? { id: 99, name: 'New', parent: 0 } : { categories: [] });
       case '/api/sync-scheduled': return send(res, 200, { changed: [] });
+      case '/api/remote-image': {
+        const r = await fetch(q.get('url'));
+        if (!r.ok) return send(res, 502, { error: 'HTTP ' + r.status });
+        return send(res, 200, Buffer.from(await r.arrayBuffer()), r.headers.get('content-type') || 'application/octet-stream');
+      }
       default: return send(res, 400, { error: 'Not available in the mock server: ' + p });
     }
   } catch (e) { send(res, 500, { error: String(e.message || e) }); }

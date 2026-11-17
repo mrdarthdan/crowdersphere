@@ -198,6 +198,14 @@ console.log('Word export');
     return { size: blob.size, type: blob.type };
   });
   check(r.size > 2000, 'builds a .docx from the new editor\'s HTML', JSON.stringify(r));
+  // a picture hosted on another site (different origin, no CORS headers) must still end up in the document
+  const remote = await page.evaluate(async (src) => {
+    const blob = await window.buildDocx({ title: 'T', html: `<p>Web picture <img src="${src}" alt="w"></p>`, resolveSrc: s => s, fetchRemote: url => CS.remoteImage(url, TOKEN) });
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const text = new TextDecoder('latin1').decode(bytes);
+    return { media: (text.match(/word\/media\/image\d+\.png/g) || []).length };
+  }, `http://127.0.0.1:${PORT}/remote.png`);
+  check(remote.media > 0, 'includes a picture hosted on another website (#6)', JSON.stringify(remote));
 }
 
 console.log('New post and switching posts');

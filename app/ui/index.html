@@ -1161,7 +1161,7 @@ $('#exportBtn').addEventListener('click', async () => {
   try {
     await ensureSaved(); await flushSave();
     const cur = state.current, m = cur.meta;
-    const blob = await window.buildDocx({ title: m.title || 'Untitled', excerpt: m.excerpt, html: currentHtml(), font: prefs.exportFont ? firstFamily(fontStack(prefs.font)) : 'Georgia', resolveSrc: s => /^images\//.test(s) ? fileUrl(s) : s });
+    const blob = await window.buildDocx({ title: m.title || 'Untitled', excerpt: m.excerpt, html: currentHtml(), font: prefs.exportFont ? firstFamily(fontStack(prefs.font)) : 'Georgia', resolveSrc: s => /^images\//.test(s) ? fileUrl(s) : s, fetchRemote: url => CS.remoteImage(url, TOKEN) });
     const name = exportName();
     const q = 'id=' + encodeURIComponent(cur.id) + '&name=' + encodeURIComponent(name);
     const r = await api('/api/export?' + q, { body: blob });
