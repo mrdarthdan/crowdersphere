@@ -11,6 +11,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  editor:
+    runs-on: ubuntu-latest
+    name: editor (browser test)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Browser test of the editor
+        working-directory: dev
+        run: |
+          npm init -y > /dev/null
+          npm install --no-save playwright@1
+          node editor-test.mjs
+
   build:
     strategy:
       fail-fast: false

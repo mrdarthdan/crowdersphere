@@ -91,7 +91,13 @@ label.field>span{display:block;font-size:12px;font-weight:600;color:var(--muted)
 #editor,#source{max-width:var(--page-width,none);margin:0 auto;background:var(--paper);min-height:100%;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
 #editor{zoom:var(--zoom,1);padding:clamp(24px,3.5vw,48px) clamp(20px,5vw,80px);outline:none;font-family:var(--editor-font);font-size:var(--editor-size);line-height:1.7;color:var(--text)}
 #editor::after{content:"";display:block;clear:both}
-#editor:empty::before,#editor.is-empty::before{content:"Start writing your post...";color:var(--placeholder);position:absolute}
+#editor .cs-doc{outline:none;min-height:40vh}
+#editor .cs-doc p.is-editor-empty:first-child::before{content:attr(data-placeholder);float:left;height:0;color:var(--placeholder);pointer-events:none}
+#editor .html-block{margin:.4em 0 1em;border:1px dashed var(--line);border-radius:6px;padding:6px 10px;background:var(--code-bg);cursor:pointer}
+#editor .html-block-label{font:600 11px "Segoe UI",sans-serif;color:var(--muted);margin-bottom:4px}
+#editor .html-block pre{margin:0;padding:0;background:none;font:12px/1.4 Consolas,monospace;white-space:pre-wrap;word-break:break-all;max-height:6em;overflow:hidden}
+#editor .html-block.ProseMirror-selectednode{outline:3px solid var(--accent);outline-offset:3px}
+#editor blockquote p:last-child{margin-bottom:0}
 #source{zoom:var(--zoom,1);display:block;width:100%;padding:24px;font:13px/1.55 Consolas,"Cascadia Mono",monospace;border:none;resize:none;min-height:70vh;color:var(--text)}
 #editor h2{font-size:1.6em;line-height:1.25;margin:1.2em 0 .5em}
 #editor h3{font-size:1.3em;margin:1.1em 0 .4em}
@@ -303,7 +309,7 @@ ol.steps{padding-left:20px;margin:6px 0;font-size:13px;color:var(--muted)}
 
     <div id="editorWrap">
       <div id="dropHint">Drop pictures to add them to the post</div>
-      <div id="editor" contenteditable="true" spellcheck="true"></div>
+      <div id="editor" spellcheck="true"></div>
       <textarea id="source" spellcheck="false" hidden></textarea>
     </div>
     <footer id="statusbar"><span><span id="wordCount" title="Click for full statistics">0 words</span> <span id="selCount"></span></span><span id="folderInfo"></span>
@@ -368,6 +374,8 @@ ol.steps{padding-left:20px;margin:6px 0;font-size:13px;color:var(--muted)}
 
 <script src="/bridge.js"></script>
 <script src="/docx.js"></script>
+<script src="/vendor/tiptap.js"></script>
+<script src="/editor.js"></script>
 <script>
 "use strict";
 const TOKEN = "__API_TOKEN__";
@@ -592,36 +600,11 @@ function afterLoad() {
 function editorWrapScrollTop() { $('#editorWrap').scrollTop = 0; }
 
 function loadIntoEditor(html) {
-  editor.innerHTML = html && html.trim() ? html : '<p><br></p>';
-  for (const img of $$('img', editor)) {
-    const s = img.getAttribute('src') || '';
-    if (/^images\//.test(s) && state.current.id) img.setAttribute('src', fileUrl(s));
-  }
-  for (const f of $$('figure', editor)) f.setAttribute('contenteditable', 'false');
-  markFeatured();
+  ed.setHTML(html || '');
+  deselectFig();
   updateEmpty();
 }
-function serializeEditor() {
-  const clone = editor.cloneNode(true);
-  for (const img of $$('img', clone)) {
-    const rel = CS.relFromUrl(img.getAttribute('src') || '');
-    if (rel) img.setAttribute('src', rel);
-  }
-  for (const el of $$('[contenteditable]', clone)) el.removeAttribute('contenteditable');
-  for (const el of $$('.is-selected,.is-featured', clone)) { el.classList.remove('is-selected', 'is-featured'); if (!el.className) el.removeAttribute('class'); }
-  const BLOCK = /^(P|H[1-6]|UL|OL|BLOCKQUOTE|PRE|FIGURE|HR|TABLE)$/;
-  const out = []; let inline = '';
-  const flush = () => { if (inline.replace(/<br>/g, '').trim()) out.push('<p>' + inline.trim() + '</p>'); inline = ''; };
-  for (const n of clone.childNodes) {
-    if (n.nodeType === 1 && BLOCK.test(n.nodeName)) { flush(); out.push(n.outerHTML); }
-    else if (n.nodeType === 1 && n.nodeName === 'DIV') { flush(); if (n.innerHTML.replace(/<br>/g, '').trim()) out.push('<p>' + n.innerHTML + '</p>'); }
-    else if (n.nodeType === 1) inline += n.outerHTML;
-    else if (n.nodeType === 3) inline += esc(n.textContent);
-  }
-  flush();
-  while (out.length && /^<p>(<br>|\s|&nbsp;)*<\/p>$/.test(out[out.length - 1])) out.pop();
-  return out.join('\n');
-}
+function serializeEditor() { return ed.getHTML(); }
 function currentHtml() { return state.sourceMode ? source.value : serializeEditor(); }
 function hasContent(html) { return /<img|<hr|<figure/i.test(html) || html.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, '').trim().length > 0; }
 
@@ -678,8 +661,19 @@ async function ensureSaved() {
 }
 
 /* ------------------------------------------------------------------ editor basics */
-document.execCommand('defaultParagraphSeparator', false, 'p');
-function updateEmpty() { editor.classList.toggle('is-empty', !hasContent(editor.innerHTML) && !editor.querySelector('ul,ol,h2,h3,h4,blockquote,pre')); }
+// The editing surface is TipTap (see editor.js). Pictures, alignment, fonts and links are
+// stored as the same HTML as before, so older posts open unchanged.
+const ed = CSE.create({
+  element: editor,
+  fileUrl: rel => state.current && state.current.id ? fileUrl(rel) : rel,
+  toRel: src => CS.relFromUrl(src) || src,
+  isFeatured: rel => !!(rel && state.current && state.current.meta.featured === rel),
+  transformPastedHTML: html => /data-pm-slice/.test(html) ? html : sanitize(html),   // copy/paste inside the editor keeps everything
+  onFiles: (files, pos) => insertImages(files, pos),
+  onChange: () => markDirty(),
+  onSelection: () => { updateToolbarState(); updateSelCount(); syncFigSelection(); }
+});
+function updateEmpty() {}   // the editor shows its own "Start writing" placeholder
 const WORD_RE = /[A-Za-z0-9\u00C0-\uFFFF]+(?:['\u2019-][A-Za-z0-9\u00C0-\uFFFF]+)*/g;
 function textStats(text) {
   text = String(text || '');
@@ -690,7 +684,7 @@ function textStats(text) {
   };
 }
 function editorText() {
-  if (!state.sourceMode) return editor.innerText;
+  if (!state.sourceMode) return ed.getText();
   const d = new DOMParser().parseFromString(source.value, 'text/html');
   return d.body.textContent || '';
 }
@@ -698,15 +692,13 @@ function plural(n, w) { return `${n.toLocaleString()} ${w}${n === 1 ? '' : 's'}`
 function updateWordCount() {
   const st = textStats(editorText());
   const imgs = state.sourceMode ? (source.value.match(/<img/g) || []).length : $$('img', editor).length;
-  $('#wordCount').textContent = `${plural(st.words, 'word')}  \u00b7  ${plural(st.chars, 'character')}  \u00b7  ${plural(imgs, 'picture')}  \u00b7  ~${Math.max(1, Math.round(st.words / 230))} min read`;
+  $('#wordCount').textContent = `${plural(st.words, 'word')}  ·  ${plural(st.chars, 'character')}  ·  ${plural(imgs, 'picture')}  ·  ~${Math.max(1, Math.round(st.words / 230))} min read`;
 }
 function updateSelCount() {
-  const sel = getSelection();
-  let txt = '';
-  if (sel.rangeCount && !sel.isCollapsed && editor.contains(sel.anchorNode)) txt = sel.toString();
+  const txt = state.sourceMode ? '' : ed.selectedText();
   if (!txt.trim()) { $('#selCount').textContent = ''; return; }
   const st = textStats(txt);
-  $('#selCount').textContent = `\u00b7  Selected: ${plural(st.words, 'word')}, ${plural(st.chars, 'character')}`;
+  $('#selCount').textContent = `·  Selected: ${plural(st.words, 'word')}, ${plural(st.chars, 'character')}`;
 }
 $('#wordCount').addEventListener('click', () => {
   if (!state.current) return;
@@ -730,117 +722,99 @@ $('#wordCount').addEventListener('click', () => {
   openModal({ title: 'Post statistics', body: `<table class="stats">${rows.map(r => `<tr><td>${esc(r[0])}</td><td>${typeof r[1] === 'number' ? r[1].toLocaleString() : esc(r[1])}</td></tr>`).join('')}</table>`,
     buttons: [{ label: 'Close', primary: true }] });
 });
-editor.addEventListener('input', markDirty);
 titleEl.addEventListener('input', () => { if (!state.current) return; state.current.meta.title = titleEl.value; markDirty(); });
-titleEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); editor.focus(); } });
+titleEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); ed.focus(); } });
 source.addEventListener('input', markDirty);
 
-document.addEventListener('selectionchange', () => {
-  const sel = getSelection();
-  if (sel.rangeCount && editor.contains(sel.anchorNode)) {
-    state.savedRange = sel.getRangeAt(0).cloneRange();
-    updateToolbarState();
-  }
-  updateSelCount();
-});
-function blockOf(node) {
-  while (node && node !== editor) { if (node.nodeType === 1 && /^(P|H[1-6]|BLOCKQUOTE|PRE|LI|DIV)$/.test(node.nodeName)) return node; node = node.parentNode; }
-  return null;
-}
+/* ------------------------------------------------------------------ toolbar */
+const COMMANDS = {
+  bold: c => c.toggleBold(),
+  italic: c => c.toggleItalic(),
+  underline: c => c.toggleUnderline(),
+  strikeThrough: c => c.toggleStrike(),
+  insertUnorderedList: c => c.toggleBulletList(),
+  insertOrderedList: c => c.toggleOrderedList(),
+  justifyLeft: c => c.setTextAlign('left'),
+  justifyCenter: c => c.setTextAlign('center'),
+  justifyRight: c => c.setTextAlign('right'),
+  unlink: c => c.extendMarkRange('link').unsetLink(),
+  removeFormat: c => c.unsetAllMarks(),
+  undo: c => c.undo(),
+  redo: c => c.redo()
+};
+function exec(cmd) { const f = COMMANDS[cmd]; if (f) f(ed.chain()).run(); }
 function updateToolbarState() {
-  for (const b of $$('#toolbar [data-cmd]')) {
-    const c = b.dataset.cmd;
-    if (/^(bold|italic|underline|strikeThrough|insertUnorderedList|insertOrderedList|justifyLeft|justifyCenter|justifyRight)$/.test(c)) {
-      try { b.classList.toggle('on', document.queryCommandState(c)); } catch (e) {}
-    }
-  }
-  const sel = getSelection();
-  let bl = sel.rangeCount ? blockOf(sel.anchorNode) : null;
-  let tag = bl ? bl.nodeName.toLowerCase() : 'p';
-  if (tag === 'li' || tag === 'div') tag = 'p';
-  const inQuote = sel.rangeCount && sel.anchorNode && (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentNode).closest('blockquote');
-  if (inQuote && tag === 'p') tag = 'blockquote';
+  if (state.sourceMode) return;
+  const on = {
+    bold: ed.isActive('bold'), italic: ed.isActive('italic'), underline: ed.isActive('underline'), strikeThrough: ed.isActive('strike'),
+    insertUnorderedList: ed.isActive('bulletList'), insertOrderedList: ed.isActive('orderedList'),
+    justifyCenter: ed.isActive({ textAlign: 'center' }), justifyRight: ed.isActive({ textAlign: 'right' })
+  };
+  on.justifyLeft = !on.justifyCenter && !on.justifyRight && !ed.isActive({ textAlign: 'justify' });
+  for (const b of $$('#toolbar [data-cmd]')) if (b.dataset.cmd in on) b.classList.toggle('on', !!on[b.dataset.cmd]);
+  const inQuote = ed.isActive('blockquote');
+  let tag = 'p';
+  for (const l of [2, 3, 4]) if (ed.isActive('heading', { level: l })) tag = 'h' + l;
+  if (ed.isActive('codeBlock')) tag = 'pre';
+  else if (tag === 'p' && inQuote) tag = 'blockquote';
   $('#blockType').value = tag;
-  let fam = '', fn = sel.rangeCount ? sel.anchorNode : null;
-  fn = fn && (fn.nodeType === 1 ? fn : fn.parentNode);
-  while (fn && fn !== editor) {
-    if (fn.style && fn.style.fontFamily && fn.style.fontFamily !== 'inherit') { fam = fn.style.fontFamily; break; }
-    if (fn.nodeName === 'FONT' && fn.getAttribute('face')) { fam = fn.getAttribute('face'); break; }
-    fn = fn.parentNode;
-  }
+  const fam = ed.attrs('textStyle').fontFamily || '';
   const match = fam && FONTS.find(f => firstFamily(f[1]).toLowerCase() === firstFamily(fam).toLowerCase());
   $('#fontPick').value = match ? match[1] : '';
-  $('[data-act="quote"]').classList.toggle('on', !!inQuote);
+  $('[data-act="quote"]').classList.toggle('on', inQuote);
 }
-function restoreRange() {
-  editor.focus();
-  if (state.savedRange && editor.contains(state.savedRange.startContainer)) {
-    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(state.savedRange);
-  }
-}
-function exec(cmd, val = null) { restoreRange(); document.execCommand(cmd, false, val); markDirty(); updateToolbarState(); }
-
 $('#toolbar').addEventListener('mousedown', e => { if (e.target.closest('button')) e.preventDefault(); });
 $('#toolbar').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
-  if (b.dataset.cmd) { deselectFig(); exec(b.dataset.cmd); return; }
+  if (b.dataset.cmd) { exec(b.dataset.cmd); return; }
   const act = b.dataset.act;
-  if (act === 'quote') { const on = b.classList.contains('on'); exec('formatBlock', on ? 'p' : 'blockquote'); }
+  if (act === 'quote') ed.chain().toggleBlockquote().run();
   if (act === 'link') insertLink();
-  if (act === 'image') { restoreRange(); $('#filePick').click(); }
-  if (act === 'hr') { exec('insertHorizontalRule'); }
+  if (act === 'image') $('#filePick').click();
+  if (act === 'hr') ed.chain().setHorizontalRule().run();
   if (act === 'source') toggleSource(!state.sourceMode);
   if (act === 'spell') { savePrefs({ spellcheck: !prefs.spellcheck }); toast(prefs.spellcheck ? 'Spell check on. Right-click an underlined word for suggestions.' : 'Spell check off.'); }
 });
-$('#blockType').addEventListener('change', e => { exec('formatBlock', e.target.value); });
+$('#blockType').addEventListener('change', e => {
+  const v = e.target.value, c = ed.chain();
+  if (v === 'p') c.setParagraph();
+  else if (/^h[2-4]$/.test(v)) c.setHeading({ level: +v[1] });
+  else if (v === 'blockquote') { if (!ed.isActive('blockquote')) c.setParagraph().setBlockquote(); }
+  else if (v === 'pre') c.setCodeBlock();
+  if (v !== 'blockquote' && ed.isActive('blockquote') && v !== 'p') c.lift('blockquote');
+  c.run();
+});
 $('#fontPick').innerHTML = '<option value="">Default font</option>' + FONTS.map(f => `<option value="${esc(f[1])}" style="font-family:${esc(f[1])}">${esc(f[0])}</option>`).join('');
 $('#fontPick').addEventListener('change', e => {
   const v = e.target.value;
-  restoreRange();
-  if (getSelection().isCollapsed) { toast('Select some text first, then pick a font.'); updateToolbarState(); return; }
-  document.execCommand('styleWithCSS', false, true);
-  document.execCommand('fontName', false, v || 'inherit');
-  document.execCommand('styleWithCSS', false, false);
-  cleanFontSpans();
-  markDirty(); updateToolbarState();
+  if (ed.tiptap.state.selection.empty) { toast('Select some text first, then pick a font.'); updateToolbarState(); ed.focus(); return; }
+  if (v) ed.chain().setFontFamily(v).run(); else ed.chain().unsetFontFamily().run();
 });
-function cleanFontSpans() {
-  for (const el of $$('font[face]', editor)) {
-    const span = document.createElement('span'); span.style.fontFamily = el.getAttribute('face');
-    span.append(...el.childNodes); el.replaceWith(span);
-  }
-  for (const el of $$('[style*="font-family"]', editor)) {
-    if (el.style.fontFamily === 'inherit' || el.style.fontFamily === '') el.style.removeProperty('font-family');
-    if (!el.getAttribute('style')) el.removeAttribute('style');
-  }
-  for (const sp of $$('span', editor)) if (!sp.attributes.length) sp.replaceWith(...sp.childNodes);
-}
 
 async function insertLink() {
-  restoreRange();
-  const range = state.savedRange ? state.savedRange.cloneRange() : null;
-  const sel = getSelection();
-  const existing = sel.anchorNode ? (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentNode).closest('a') : null;
+  if (state.sourceMode) return;
+  const tt = ed.tiptap;
+  const existing = ed.isActive('link') ? ed.attrs('link') : null;
+  if (existing) ed.chain().extendMarkRange('link').run();
+  const selected = ed.selectedText();
   const res = await ask(existing ? 'Edit link' : 'Insert link', [
-    { label: 'Web address', value: existing ? existing.getAttribute('href') : 'https://', placeholder: 'https://example.com' },
-    { label: 'Text to show', value: existing ? existing.textContent : (range ? range.toString() : ''), hint: 'Leave as-is to keep the selected text.' },
+    { label: 'Web address', value: existing ? existing.href : 'https://', placeholder: 'https://example.com' },
+    { label: 'Text to show', value: selected, hint: 'Leave as-is to keep the selected text.' },
     { label: 'Open in a new tab', type: 'checkbox', value: existing ? existing.target === '_blank' : false }
   ], 'Save link');
-  if (!res) return;
+  if (!res) { ed.focus(); return; }
   let [url, text, newTab] = res;
-  url = url.trim(); if (!url || url === 'https://') return;
+  url = url.trim(); if (!url || url === 'https://') { ed.focus(); return; }
   if (!/^(https?:|mailto:|tel:|#|\/)/i.test(url)) url = 'https://' + url;
-  editor.focus();
-  if (existing) {
-    existing.setAttribute('href', url);
-    if (text.trim() && text !== existing.textContent) existing.textContent = text;
-    if (newTab) { existing.target = '_blank'; existing.rel = 'noopener'; } else { existing.removeAttribute('target'); existing.removeAttribute('rel'); }
+  const attrs = { href: url, target: newTab ? '_blank' : null, rel: newTab ? 'noopener' : null };
+  text = text.trim();
+  const c = ed.chain();
+  if (text && text !== selected || tt.state.selection.empty) {
+    c.insertContent({ type: 'text', text: text || url, marks: [{ type: 'link', attrs }] });
   } else {
-    if (range) { sel.removeAllRanges(); sel.addRange(range); }
-    const a = `<a href="${esc(url)}"${newTab ? ' target="_blank" rel="noopener"' : ''}>${esc(text.trim() || url)}</a>`;
-    document.execCommand('insertHTML', false, a);
+    c.setLink(attrs);
   }
-  markDirty();
+  c.run();
 }
 
 function toggleSource(on) {
@@ -856,11 +830,13 @@ function toggleSource(on) {
     loadIntoEditor(source.value);
     source.hidden = true; editor.hidden = false;
     $('#toolbar').classList.remove('source-mode'); $('#btnSource').classList.remove('on');
+    markDirty();
   }
   updateWordCount();
 }
 
 /* ------------------------------------------------------------------ paste & drop */
+// Pasted HTML from Word, Google Docs or web pages is cleaned before the editor reads it.
 const ALLOWED = { P:[], H2:[], H3:[], H4:[], H5:[], H6:[], STRONG:[], B:[], EM:[], I:[], U:[], S:[], DEL:[], STRIKE:[], SUB:[], SUP:[], A:['href','title','target','rel'], UL:[], OL:[], LI:[], BLOCKQUOTE:[], BR:[], HR:[], PRE:[], CODE:[], IMG:['src','alt'], TABLE:[], THEAD:[], TBODY:[], TR:[], TH:['colspan','rowspan'], TD:['colspan','rowspan'] };
 const DROP = /^(SCRIPT|STYLE|META|LINK|TITLE|HEAD|IFRAME|OBJECT|EMBED|SVG|MATH|NOSCRIPT|TEMPLATE|BUTTON|INPUT|SELECT|TEXTAREA|FORM)$/;
 function cleanTree(node) {
@@ -896,19 +872,6 @@ function sanitize(html) {
   cleanTree(doc.body);
   return doc.body.innerHTML.replace(/<p>\s*<\/p>/g, '');
 }
-editor.addEventListener('paste', e => {
-  const dt = e.clipboardData; if (!dt) return;
-  const files = Array.from(dt.files || []).filter(f => f.type.startsWith('image/'));
-  if (files.length) { e.preventDefault(); insertImages(files, getSelection().rangeCount ? getSelection().getRangeAt(0) : null); return; }
-  const html = dt.getData('text/html');
-  if (html) { e.preventDefault(); document.execCommand('insertHTML', false, sanitize(html)); markDirty(); return; }
-  const text = dt.getData('text/plain');
-  if (text && /\n/.test(text)) {
-    e.preventDefault();
-    const paras = text.replace(/\r/g, '').split(/\n{2,}/).map(p => '<p>' + esc(p).replace(/\n/g, '<br>') + '</p>').join('');
-    document.execCommand('insertHTML', false, paras); markDirty();
-  } else if (text) { e.preventDefault(); document.execCommand('insertText', false, text); }
-});
 const wrap = $('#editorWrap');
 let dragDepth = 0;
 wrap.addEventListener('dragenter', e => { if (e.dataTransfer.types.includes('Files')) { dragDepth++; wrap.classList.add('dragging'); } });
@@ -916,17 +879,16 @@ wrap.addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth - 1
 wrap.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); });
 wrap.addEventListener('drop', e => {
   dragDepth = 0; wrap.classList.remove('dragging');
+  if (e.defaultPrevented) return;   // dropped on the text: the editor placed it already
   const files = Array.from(e.dataTransfer.files || []).filter(f => f.type.startsWith('image/'));
   if (!files.length) return;
   e.preventDefault();
   if (state.sourceMode) { toast('Switch out of HTML view to add pictures.'); return; }
-  let range = document.caretRangeFromPoint ? document.caretRangeFromPoint(e.clientX, e.clientY) : null;
-  if (range && !editor.contains(range.startContainer)) range = null;
-  insertImages(files, range);
+  insertImages(files, null);   // dropped beside the page: add at the end
 });
 $('#filePick').addEventListener('change', e => {
   const files = Array.from(e.target.files || []); e.target.value = '';
-  if (files.length) insertImages(files, state.savedRange);
+  if (files.length) insertImages(files, ed.tiptap.state.selection.from);
 });
 
 /* ------------------------------------------------------------------ pictures */
@@ -953,78 +915,43 @@ async function prepareImage(file) {
   if (!isPng) name = name.replace(/\.[^.]+$/, '') + '.jpg';
   return { blob, name };
 }
-function makeFigure(src, alt = '') {
-  const f = document.createElement('figure');
-  f.className = 'wp-block-image aligncenter';
-  f.style.width = '100%';
-  f.setAttribute('contenteditable', 'false');
-  const img = document.createElement('img');
-  img.src = src; img.alt = alt; img.setAttribute('style', 'width:100%;height:auto');
-  f.appendChild(img);
-  return f;
-}
-function topLevel(node) { while (node && node.parentNode !== editor) node = node.parentNode; return node; }
-function placeFigure(fig, range) {
-  let block = null, atStart = false;
-  if (range && editor.contains(range.startContainer)) {
-    if (range.startContainer === editor) block = editor.childNodes[range.startOffset] || null, atStart = !!block;
-    else {
-      block = topLevel(range.startContainer);
-      const pre = document.createRange(); pre.selectNodeContents(block); pre.setEnd(range.startContainer, range.startOffset);
-      atStart = pre.toString().length === 0 && !pre.cloneContents().querySelector('img');
-    }
-  }
-  if (!block) editor.appendChild(fig);
-  else if (block.nodeType === 1 && block.nodeName === 'P' && !block.textContent.trim() && !block.querySelector('img')) block.replaceWith(fig);
-  else if (atStart) block.before(fig);
-  else block.after(fig);
-  if (!fig.nextElementSibling) { const p = document.createElement('p'); p.innerHTML = '<br>'; fig.after(p); }
-}
-async function insertImages(files, range) {
+async function insertImages(files, pos) {
   if (!state.current) return;
-  deselectFig();
+  if (state.sourceMode) { toast('Switch out of HTML view to add pictures.'); return; }
   try { await ensureSaved(); } catch (e) { toast(e.message, 'error'); return; }
-  let last = null, count = 0;
+  let count = 0;
   setSaveState('Adding pictures...');
   for (const file of files) {
     if (!/^image\/(jpeg|png|gif|webp)$/.test(file.type)) { toast(`${file.name || 'That file'}: use JPG, PNG, GIF or WebP pictures.`, 'error'); continue; }
     try {
       const { blob, name } = await prepareImage(file);
       const r = await api(`/api/image?id=${encodeURIComponent(state.current.id)}&name=${encodeURIComponent(name)}`, { body: blob });
-      const fig = makeFigure(fileUrl(r.src));
-      if (last) last.after(fig); else placeFigure(fig, range);
-      last = fig; count++;
+      pos = ed.insertFigure({ src: r.src, alt: '', align: 'aligncenter', width: 100 }, pos);
+      count++;
     } catch (e) { toast('Picture not added: ' + e.message, 'error'); }
   }
-  if (count) { markDirty(); if (count === 1) selectFig(last); }
-  else setSaveState(state.dirty ? 'Editing...' : 'Saved');
+  if (!count) setSaveState(state.dirty ? 'Editing...' : 'Saved');
 }
 
-function figRel(fig) { const m = ($('img', fig)?.getAttribute('src') || '').match(/\/(images\/[^?#]+)$/); return m ? decodeURIComponent(m[1]) : ''; }
-function markFeatured() {
-  const f = state.current && state.current.meta.featured;
-  for (const fig of $$('figure', editor)) fig.classList.toggle('is-featured', !!f && figRel(fig) === f);
-}
-function selectFig(fig) {
-  if (state.selFig && state.selFig !== fig) state.selFig.classList.remove('is-selected');
-  state.selFig = fig; fig.classList.add('is-selected');
-  getSelection().removeAllRanges();
+function figRel(fig) { return (fig && fig.dataset && fig.dataset.rel) || ''; }
+function markFeatured() { ed.refreshFigures(); }
+// The picture toolbar follows the editor's selection: clicking a picture selects it.
+function syncFigSelection() {
+  const f = state.sourceMode ? null : ed.selectedFigure();
+  if (!f) { state.selFig = null; $('#imgbar').hidden = true; return; }
+  state.selFig = f.dom;
   $('#imgbar').hidden = false;
   syncImgbar(); positionImgbar();
 }
-function deselectFig() {
-  if (state.selFig) state.selFig.classList.remove('is-selected');
-  state.selFig = null; $('#imgbar').hidden = true;
-}
-function figAlign(fig) { return ['alignleft', 'aligncenter', 'alignright', 'alignnone'].find(c => fig.classList.contains(c)) || 'alignnone'; }
-function figWidth(fig) { return parseInt(fig.style.width) || 100; }
+function selectFig(fig) { ed.selectFigureDom(fig); }
+function deselectFig() { ed.deselect(); state.selFig = null; $('#imgbar').hidden = true; }
+function figAttrs() { const f = ed.selectedFigure(); return f ? f.node.attrs : null; }
 function syncImgbar() {
-  const fig = state.selFig; if (!fig) return;
-  const a = figAlign(fig), w = figWidth(fig);
-  for (const b of $$('#imgbar [data-img^="align"]')) b.classList.toggle('on', b.dataset.img === a);
-  for (const b of $$('#imgbar [data-w]')) b.classList.toggle('on', +b.dataset.w === w);
-  $('#imgWidth').value = w; $('#imgWidthLabel').textContent = w + '%';
-  $('#imgbar [data-img="featured"]').classList.toggle('on', figRel(fig) === state.current.meta.featured);
+  const a = figAttrs(); if (!a) return;
+  for (const b of $$('#imgbar [data-img^="align"]')) b.classList.toggle('on', b.dataset.img === a.align);
+  for (const b of $$('#imgbar [data-w]')) b.classList.toggle('on', +b.dataset.w === a.width);
+  $('#imgWidth').value = a.width; $('#imgWidthLabel').textContent = a.width + '%';
+  $('#imgbar [data-img="featured"]').classList.toggle('on', a.src === state.current.meta.featured);
 }
 function positionImgbar() {
   const fig = state.selFig, bar = $('#imgbar'); if (!fig || bar.hidden) return;
@@ -1037,18 +964,8 @@ function positionImgbar() {
 }
 wrap.addEventListener('scroll', positionImgbar);
 addEventListener('resize', positionImgbar);
-editor.addEventListener('mousedown', e => {
-  const fig = e.target.closest('figure');
-  if (fig && editor.contains(fig)) { e.preventDefault(); selectFig(fig); }
-  else deselectFig();
-});
-document.addEventListener('mousedown', e => {
-  if (state.selFig && !e.target.closest('#imgbar') && !e.target.closest('#editor figure') && !e.target.closest('#modalBack')) deselectFig();
-});
 document.addEventListener('keydown', e => {
-  if (!state.selFig || e.target.closest('input,textarea,#modalBack')) return;
-  if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); figAction('delete'); }
-  if (e.key === 'Escape') deselectFig();
+  if (e.key === 'Escape' && state.selFig && !e.target.closest('input,textarea,#modalBack')) deselectFig();
 });
 $('#imgbar').addEventListener('mousedown', e => { if (e.target.closest('button')) e.preventDefault(); });
 $('#imgbar').addEventListener('click', e => {
@@ -1057,50 +974,31 @@ $('#imgbar').addEventListener('click', e => {
   else figAction(b.dataset.img);
 });
 $('#imgWidth').addEventListener('input', e => setFigWidth(+e.target.value));
-function setFigWidth(w) {
-  const fig = state.selFig; if (!fig) return;
-  fig.style.width = w + '%';
-  syncImgbar(); positionImgbar(); markDirty();
-}
+function setFigWidth(w) { ed.updateFigure({ width: w }); }
 async function figAction(act) {
-  const fig = state.selFig; if (!fig) return;
+  const a = figAttrs(); if (!a) return;
   if (/^align/.test(act)) {
-    fig.classList.remove('alignleft', 'aligncenter', 'alignright', 'alignnone');
-    fig.classList.add(act);
-    if ((act === 'alignleft' || act === 'alignright') && figWidth(fig) > 60) fig.style.width = '45%';
+    const upd = { align: act };
+    if ((act === 'alignleft' || act === 'alignright') && a.width > 60) upd.width = 45;
+    ed.updateFigure(upd);
   } else if (act === 'details') {
-    const img = $('img', fig), cap = $('figcaption', fig);
     const res = await ask('Picture details', [
-      { label: 'Alt text (describes the picture for screen readers and search engines)', value: img.alt },
-      { label: 'Caption (shown under the picture)', value: cap ? cap.textContent : '', multiline: true }
+      { label: 'Alt text (describes the picture for screen readers and search engines)', value: a.alt || '' },
+      { label: 'Caption (shown under the picture)', value: a.caption || '', multiline: true }
     ], 'Save');
     if (!res) return;
-    img.alt = res[0].trim();
-    const text = res[1].trim();
-    if (text) { let c = cap || document.createElement('figcaption'); c.textContent = text; if (!cap) fig.appendChild(c); }
-    else if (cap) cap.remove();
-    if (state.selFig !== fig) selectFig(fig);
+    ed.updateFigure({ alt: res[0].trim(), caption: res[1].trim() });
   } else if (act === 'featured') {
-    const rel = figRel(fig);
-    state.current.meta.featured = state.current.meta.featured === rel ? '' : rel;
-    markFeatured(); renderFeatured();
-  } else if (act === 'up') {
-    const prev = fig.previousElementSibling; if (prev) prev.before(fig);
-  } else if (act === 'down') {
-    const next = fig.nextElementSibling; if (next) next.after(fig);
-    if (!fig.nextElementSibling) { const p = document.createElement('p'); p.innerHTML = '<br>'; fig.after(p); }
+    state.current.meta.featured = state.current.meta.featured === a.src ? '' : a.src;
+    markFeatured(); renderFeatured(); syncImgbar(); markDirty();
+  } else if (act === 'up' || act === 'down') {
+    ed.moveFigure(act === 'up' ? -1 : 1);
   } else if (act === 'delete') {
-    const rel = figRel(fig);
-    deselectFig();
-    const next = fig.nextElementSibling;
-    fig.remove();
-    if (rel && rel === state.current.meta.featured) renderFeatured();   // stays featured, just no longer in the body
-    if (next) { const r = document.createRange(); r.setStart(next, 0); r.collapse(true); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
-    if (!editor.firstChild) editor.innerHTML = '<p><br></p>';
-    markDirty(); return;
+    ed.deleteFigure();
+    if (a.src && a.src === state.current.meta.featured) renderFeatured();   // stays featured, just no longer in the body
+    return;
   }
-  syncImgbar(); markDirty();
-  requestAnimationFrame(() => { fig.scrollIntoView({ block: 'nearest' }); positionImgbar(); });
+  requestAnimationFrame(() => { if (state.selFig) { state.selFig.scrollIntoView({ block: 'nearest' }); positionImgbar(); } });
 }
 
 /* ------------------------------------------------------------------ side panel */
@@ -1109,8 +1007,9 @@ function renderPanel() {
   $('#excerpt').value = m.excerpt || '';
   $('#tags').value = m.tags || '';
   renderCategories(); renderFeatured(); renderWpStatus();
-  $('#localInfo').textContent = state.current.id ? (state.postsDir + '\\' + state.current.id) : 'Not saved yet - starts saving as soon as you type.';
-  $('#folderInfo').textContent = state.current.id ? 'Saved in ' + state.postsDir + '\\' + state.current.id : '';
+  const sep = /\\/.test(state.postsDir || '') ? '\\' : '/';
+  $('#localInfo').textContent = state.current.id ? (state.postsDir + sep + state.current.id) : 'Not saved yet - starts saving as soon as you type.';
+  $('#folderInfo').textContent = state.current.id ? 'Saved in ' + state.postsDir + sep + state.current.id : '';
   $('#showFolder').disabled = $('#deletePost').disabled = !state.current.id;
 }
 $('#excerpt').addEventListener('input', e => { state.current.meta.excerpt = e.target.value; markDirty(); });
@@ -1155,7 +1054,7 @@ $('#addCat').addEventListener('click', async () => {
     toast(`Category "${c.name}" created on WordPress.`, 'ok');
   } catch (e) { toast(e.message, 'error'); }
 });
-function featuredInBody(rel) { return $$('#editor figure').some(fig => figRel(fig) === rel); }
+function featuredInBody(rel) { return ed.figureRels().includes(rel); }
 function renderFeatured() {
   const f = state.current.meta.featured, box = $('#featuredBox');
   if (f && state.current.id) {

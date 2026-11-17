@@ -544,8 +544,8 @@ function Handle-Request($ctx) {
         if (Test-Path $ico) { Send-Bytes $ctx ([IO.File]::ReadAllBytes($ico)) 'image/x-icon' } else { Send-Bytes $ctx ([byte[]]@()) 'image/x-icon' 404 }
         return
     }
-    if ($path -match '^/([a-z0-9-]+\.js)$') {
-        $jsFile = Join-Path $UiDir $Matches[1]
+    if ($path -match '^/((vendor/)?[a-z0-9-]+\.js)$') {
+        $jsFile = Join-Path $UiDir ($Matches[1] -replace '/', '\')
         if (Test-Path -LiteralPath $jsFile) { Send-Bytes $ctx ([IO.File]::ReadAllBytes($jsFile)) 'application/javascript; charset=utf-8' }
         else { Send-Bytes $ctx ([byte[]]@()) 'text/plain' 404 }
         return
