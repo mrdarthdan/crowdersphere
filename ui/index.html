@@ -1389,7 +1389,9 @@ $('#panelClose').addEventListener('click', () => { $('#panel').classList.add('hi
 /* ------------------------------------------------------------------ updates */
 // The desktop app checks GitHub for a newer release shortly after it starts (unless turned off in Settings).
 function offerUpdate(r) {
-  const notes = (r.notes || '').trim();
+  // Release notes: just the "What's new" part (above the --- line), without markdown symbols
+  const notes = (r.notes || '').split(/\n-{3,}\s*\n/)[0]
+    .replace(/^#+\s*What's new[^\n]*\n?/i, '').replace(/\*\*|__|`/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').trim();
   openModal({ title: 'Update available', body: `<p>CrowderSphere <b>${esc(r.version)}</b> is available. You have ${esc(r.current)}.</p>
       ${notes ? `<div class="update-notes">${esc(notes.length > 1500 ? notes.slice(0, 1500) + '…' : notes)}</div>` : ''}
       <p class="hint">Your post is saved first. CrowderSphere closes, installs the update, and opens again.</p>

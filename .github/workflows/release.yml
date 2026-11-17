@@ -55,6 +55,23 @@ jobs:
             echo "::error::Tag ${GITHUB_REF_NAME} doesn't match version $v in src-tauri/Cargo.toml"; exit 1
           fi
 
+      - name: Release notes from CHANGELOG.md
+        id: notes
+        shell: bash
+        run: |
+          v=$(grep -m1 '^version' src-tauri/Cargo.toml | cut -d'"' -f2)
+          # the lines under "## <version>" up to the next "## " heading
+          notes=$(awk -v v="## $v" '$0==v {f=1; next} /^## / {f=0} f' CHANGELOG.md | sed -e '/./,$!d')
+          if [ -z "$notes" ]; then echo "::warning::CHANGELOG.md has no section for $v"; fi
+          {
+            echo "body<<CS_NOTES_EOF"
+            if [ -n "$notes" ]; then echo "## What's new in $v"; echo; echo "$notes"; echo; fi
+            echo "---"
+            echo
+            cat .github/release-footer.md
+            echo "CS_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Linux build dependencies
         if: matrix.name == 'linux'
         run: |
@@ -124,17 +141,7 @@ jobs:
           args: ${{ matrix.args }} ${{ env.SIGN_ARGS }} ${{ env.UPDATER_ARGS }}
           tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v__VERSION__' }}
           releaseName: CrowderSphere ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v__VERSION__' }}
-          releaseBody: |
-            CrowderSphere is a desktop editor for writing WordPress posts. Write with formatting and pictures, keep every post as a folder on your computer, export to Word, and send posts to your blog as drafts, published or scheduled. See the [README](https://github.com/mrdarthdan/crowdersphere#readme) for everything it does.
-
-            **Download the installer for your computer below:**
-            - **Windows 10/11:** `CrowderSphere_*_x64-setup.exe`
-            - **Mac (Intel and Apple silicon):** `CrowderSphere_*_universal.dmg`. First time: right-click the app and choose Open.
-            - **Linux:** `.AppImage`, `.deb` or `.rpm`
-
-            Your posts and WordPress connection are kept when you update. To uninstall on Windows, use Settings → Apps → Installed apps.
-
-            [Code signing policy](https://github.com/mrdarthdan/crowdersphere#code-signing-policy) · [Privacy](https://github.com/mrdarthdan/crowdersphere#privacy)
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           prerelease: false
 
