@@ -74,6 +74,6 @@ From then on every release also gets `latest.json` and `.sig` files, and the app
 
 ## Making a release
 
-1. Change `version` in `src-tauri/Cargo.toml` (for example to `1.7.0`) and commit.
-2. Push a matching tag: `git tag v1.7.0 && git push origin v1.7.0`
+1. Change `version` in `src-tauri/Cargo.toml` (for example to `2.3.0`), add a `## 2.3.0` section to `CHANGELOG.md` saying what's new, and commit. The release notes, and the app's **Update available** window, use that section.
+2. Push a matching tag (`git tag v2.3.0 && git push origin v2.3.0`), or run the **Release** workflow from the Actions tab.
 3. When the Release workflow finishes, open the draft release on GitHub, check it, and click **Publish release**.

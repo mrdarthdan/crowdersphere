@@ -216,6 +216,10 @@ console.log('Update prompt');
   check(/9\.9\.9/.test(t) && /2\.0\.1/.test(t) && /Update now/.test(t) && t.includes('Fixes <b>things</b>'), 'shows the new version, notes as plain text, and Update now', t.slice(0, 200));
   await page.click('#modalBack button:not(.primary)');
   check(await page.evaluate(() => $('#modalBack').hidden), 'Later closes it');
+  await page.evaluate(() => offerUpdate({ available: true, version: '2.2.0', current: '2.1.0', notes: "## What's new in 2.2.0\n\n- **New app icon** and a [link](https://x)\n\n---\n\nDownload the installer below" }));
+  const t2 = await page.evaluate(() => $('.update-notes').textContent);
+  check(t2 === '- New app icon and a link', 'shows only what\'s new, without markdown or the download text', JSON.stringify(t2));
+  await page.click('#modalBack button:not(.primary)');
 }
 
 console.log('New post and switching posts');
