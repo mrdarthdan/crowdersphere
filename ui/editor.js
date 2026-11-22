@@ -17,12 +17,10 @@
 
   const ALIGNS = ['alignleft', 'aligncenter', 'alignright', 'alignnone'];
   const MEDIA_NODES = ['figure', 'videoEmbed', 'videoFile'];
-  // pictures always; video files once the editor knows how to store them (opts.videos)
-  let videoFilesOn = false;
-  function isMediaFile(f) { return f.type.startsWith('image/') || (videoFilesOn && isVideoFile(f)); }
+  function isMediaFile(f) { return f.type.startsWith('image/') || isVideoFile(f); }
   function isVideoFile(f) { return /^video\//.test(f.type) || /\.(mp4|m4v|mov|webm)$/i.test(f.name || ''); }
 
-  function displaySrc(opts, src) { return /^images\//.test(src || '') ? opts.fileUrl(src) : src; }
+  function displaySrc(opts, src) { return /^(images|videos)\//.test(src || '') ? opts.fileUrl(src) : src; }
 
   // ------------------------------------------------------------------ picture with caption
   function makeFigure(opts) {
@@ -261,6 +259,94 @@
     });
   }
 
+  // ------------------------------------------------------------------ video files from the computer
+  // <figure class="wp-block-video"><video controls src="videos/x.mp4" poster="images/x-poster.jpg"></video></figure>,
+  // the same HTML WordPress's own Video block saves.
+  const VIDEO_ATTRS = ['src', 'poster', 'controls', 'preload', 'playsinline', 'class', 'style'];
+  function makeVideoFile(opts) {
+    return Node.create({
+      name: 'videoFile',
+      group: 'block',
+      atom: true,
+      selectable: true,
+      draggable: true,
+      addAttributes() {
+        return {
+          src: { default: '' },
+          poster: { default: '' },
+          caption: { default: '' },
+          align: { default: 'aligncenter' },
+          width: { default: 100 },
+          extraClass: { default: '' }
+        };
+      },
+      parseHTML() {
+        return [{
+          tag: 'figure',
+          priority: 60,
+          getAttrs: el => {
+            const videos = el.querySelectorAll('video');
+            if (videos.length !== 1 || el.querySelector('img, iframe, figure figure')) return false;
+            const v = videos[0], source = v.querySelector('source[src]');
+            const src = v.getAttribute('src') || (source && source.getAttribute('src'));
+            // settings the editor has no buttons for (autoplay, loop, muted...) are kept by leaving it as HTML
+            if (!src || Array.from(v.attributes).some(a => !VIDEO_ATTRS.includes(a.name))) return false;
+            const { align, extra } = mediaClasses(el, /^wp-block-video$/);
+            return {
+              src: opts.toRel(src),
+              poster: v.getAttribute('poster') ? opts.toRel(v.getAttribute('poster')) : '',
+              caption: captionOf(el), align, width: widthOf(el), extraClass: extra
+            };
+          }
+        }];
+      },
+      renderHTML({ node }) {
+        const a = node.attrs;
+        const cls = ['wp-block-video', a.align, a.extraClass].filter(Boolean).join(' ');
+        const out = ['figure', { class: cls, style: `width:${a.width}%` },
+          ['video', { controls: '', src: a.src, poster: a.poster || null, preload: 'metadata' }]];
+        if (a.caption) out.push(['figcaption', { class: 'wp-element-caption' }, a.caption]);
+        return out;
+      },
+      addNodeView() {
+        return ({ node }) => {
+          const dom = document.createElement('figure');
+          const video = document.createElement('video');
+          const handle = document.createElement('div');
+          const cap = document.createElement('figcaption');
+          video.controls = true;
+          video.preload = 'metadata';
+          handle.className = 'cs-video-handle';
+          handle.title = 'Click to select the video';
+          dom.append(handle, video);
+          let selected = false;
+          const paint = n => {
+            const a = n.attrs;
+            dom.className = ['wp-block-video', 'cs-videofile', a.align, a.extraClass].filter(Boolean).join(' ');
+            dom.style.width = a.width + '%';
+            dom.classList.toggle('is-selected', selected);
+            if (video.getAttribute('src') !== displaySrc(opts, a.src)) video.src = displaySrc(opts, a.src);
+            const poster = a.poster ? displaySrc(opts, a.poster) : '';
+            if ((video.getAttribute('poster') || '') !== poster) { if (poster) video.poster = poster; else video.removeAttribute('poster'); }
+            handle.textContent = 'Video · ' + String(a.src || '').split('/').pop();
+            if (a.caption) { cap.textContent = a.caption; if (!cap.parentNode) dom.appendChild(cap); }
+            else cap.remove();
+          };
+          paint(node);
+          return {
+            dom,
+            update(n) { if (n.type.name !== 'videoFile') return false; paint(n); return true; },
+            selectNode() { selected = true; dom.classList.add('is-selected'); },
+            deselectNode() { selected = false; dom.classList.remove('is-selected'); },
+            // the player's own buttons (play, seek, volume) work without the editor taking the click
+            stopEvent(e) { return e.target === video && !/^drag/.test(e.type); },
+            ignoreMutation() { return true; }
+          };
+        };
+      }
+    });
+  }
+
   // ------------------------------------------------------------------ anything else: kept verbatim
   const RAW_TAGS = ['iframe', 'video', 'audio', 'section', 'aside', 'details', 'figure', 'object', 'embed', 'dl', 'address', 'center',
     'div[class]', 'div[style]', 'div[id]'];
@@ -324,6 +410,7 @@
         makeFigure(opts),
         makeInlineImage(opts),
         makeVideoEmbed(opts),
+        makeVideoFile(opts),
         HtmlBlock,
         Placeholder.configure({ placeholder: 'Start writing your post...' })
       ],

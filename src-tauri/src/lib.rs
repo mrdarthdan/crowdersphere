@@ -1,8 +1,9 @@
 //! CrowderSphere desktop app (Tauri 2).
 //!
 //! The editor (ui/) runs in the system web view. It calls the commands below through
-//! Tauri's IPC; nothing listens on a network port. Pictures are shown to the editor through
-//! the private `csfiles:` protocol, which only serves files from a post's images folder.
+//! Tauri's IPC; nothing listens on a network port. Pictures and videos are shown to the
+//! editor through the private `csfiles:` protocol, which only serves files from a post's images
+//! and videos folders.
 
 mod posts;
 mod settings;
@@ -147,6 +148,37 @@ async fn save_image(state: State<'_, AppState>, request: tauri::ipc::Request<'_>
     Ok(json!({ "src": src }))
 }
 
+/// One piece of a video being added (raw bytes in the body). Headers: x-id (post), x-name (the
+/// video's file name), x-upload (an id for this video), x-offset (where the piece goes), x-last ("1"
+/// on the final piece). Returns {src: "videos/..."} after the last piece, {} before that.
+#[tauri::command]
+async fn save_video_chunk(state: State<'_, AppState>, request: tauri::ipc::Request<'_>) -> Res<Value> {
+    let id = header(&request, "x-id")?;
+    let name = header(&request, "x-name")?;
+    let upload = header(&request, "x-upload")?;
+    let offset: u64 = header(&request, "x-offset")?.parse().map_err(|_| "Bad x-offset")?;
+    let last = header(&request, "x-last")? == "1";
+    let bytes = raw_body(&request)?;
+    let root = state.root();
+    let _g = state.disk.lock().await;
+    let src = logged(
+        "save_video_chunk",
+        posts::save_video_chunk(&root, &id, &name, &upload, offset, last, &bytes),
+    )?;
+    Ok(match src {
+        Some(src) => json!({ "src": src }),
+        None => json!({}),
+    })
+}
+
+#[tauri::command]
+async fn discard_video(state: State<'_, AppState>, id: String, upload: String) -> Res<Value> {
+    let root = state.root();
+    let _g = state.disk.lock().await;
+    logged("discard_video", posts::discard_video_upload(&root, &id, &upload))?;
+    Ok(json!({ "ok": true }))
+}
+
 /// Raw .docx bytes in the body; post id and file name in the x-id / x-name headers.
 #[tauri::command]
 async fn export_docx(state: State<'_, AppState>, request: tauri::ipc::Request<'_>) -> Res<Value> {
@@ -196,10 +228,14 @@ async fn add_category(state: State<'_, AppState>, name: String) -> Res<Value> {
     logged("add_category", wp::add_category(&state.wp(), &name).await)
 }
 
+/// Upload progress for big files goes to the editor as "cs-publish-progress" events: {file, done, total}.
 #[tauri::command]
-async fn publish(state: State<'_, AppState>, body: Value) -> Res<Value> {
+async fn publish(app: tauri::AppHandle, state: State<'_, AppState>, body: Value) -> Res<Value> {
     let w = state.wp();
     let root = state.root();
+    let report: wp::Report = std::sync::Arc::new(move |v| {
+        let _ = app.emit("cs-publish-progress", v);
+    });
     let _g = state.disk.lock().await;
     logged(
         "publish",
@@ -210,6 +246,7 @@ async fn publish(state: State<'_, AppState>, body: Value) -> Res<Value> {
             &str_of(body.get("status")),
             &str_of(body.get("html")),
             &str_of(body.get("scheduleAt")),
+            report,
         )
         .await,
     )
@@ -331,38 +368,101 @@ async fn quit(app: tauri::AppHandle) -> Res<()> {
     Ok(())
 }
 
-// ------------------------------------------------------------------ picture protocol
+// ------------------------------------------------------------------ picture and video protocol
 
-/// csfiles://localhost/<post-id>/images/<file>  (http://csfiles.localhost/... on Windows)
-fn serve_file(app: &tauri::AppHandle, path: &str) -> tauri::http::Response<Vec<u8>> {
-    let not_found = || {
+/// csfiles://localhost/<post-id>/<images|videos>/<file>  (http://csfiles.localhost/... on Windows)
+///
+/// Videos are asked for a piece at a time (HTTP range requests), so they start playing and can be
+/// skipped through without reading the whole file into memory.
+fn serve_file(app: &tauri::AppHandle, request: &tauri::http::Request<Vec<u8>>) -> tauri::http::Response<Vec<u8>> {
+    use std::io::{Read, Seek, SeekFrom};
+    let respond = |status: u16| {
         tauri::http::Response::builder()
-            .status(404)
+            .status(status)
+            // the Word exporter fetch()es pictures from the editor page, a different origin
             .header("Access-Control-Allow-Origin", "*")
-            .body(Vec::new())
-            .unwrap()
     };
-    let parts: Vec<String> = path
+    let not_found = || respond(404).body(Vec::new()).unwrap();
+    let parts: Vec<String> = request
+        .uri()
+        .path()
         .trim_start_matches('/')
         .split('/')
         .map(|p| percent_encoding::percent_decode_str(p).decode_utf8_lossy().into_owned())
         .collect();
-    if parts.len() != 3 || parts[1] != "images" || !posts::is_safe_name(&parts[0]) || !posts::is_safe_name(&parts[2]) {
+    if parts.len() != 3 || !posts::is_safe_name(&parts[0]) {
         return not_found();
     }
     let root = app.state::<AppState>().root();
-    let file = root.join(&parts[0]).join("images").join(&parts[2]);
-    match std::fs::read(&file) {
-        Ok(bytes) => tauri::http::Response::builder()
+    let Ok(file) = posts::media_path(&root.join(&parts[0]), &format!("{}/{}", parts[1], parts[2])) else {
+        return not_found();
+    };
+    let Ok(mut f) = std::fs::File::open(&file) else {
+        return not_found();
+    };
+    let Ok(len) = f.metadata().map(|m| m.len()) else {
+        return not_found();
+    };
+    let ok = |status: u16| {
+        respond(status)
             .header("Content-Type", posts::mime_of(&file))
             .header("Cache-Control", "no-store")
             .header("X-Content-Type-Options", "nosniff")
-            // the Word exporter fetch()es pictures from the editor page, a different origin
-            .header("Access-Control-Allow-Origin", "*")
-            .body(bytes)
+            .header("Accept-Ranges", "bytes")
+    };
+    let range = request.headers().get("range").and_then(|v| v.to_str().ok());
+    match range.map(|r| byte_range(r, len)) {
+        None => {
+            let mut bytes = Vec::new();
+            match f.read_to_end(&mut bytes) {
+                Ok(_) => ok(200).body(bytes).unwrap(),
+                Err(_) => not_found(),
+            }
+        }
+        Some(Some((start, end))) => {
+            let mut bytes = vec![0u8; (end - start + 1) as usize];
+            match f.seek(SeekFrom::Start(start)).and_then(|_| f.read_exact(&mut bytes)) {
+                Ok(()) => ok(206)
+                    .header("Content-Range", format!("bytes {start}-{end}/{len}"))
+                    .body(bytes)
+                    .unwrap(),
+                Err(_) => not_found(),
+            }
+        }
+        Some(None) => respond(416)
+            .header("Content-Range", format!("bytes */{len}"))
+            .body(Vec::new())
             .unwrap(),
-        Err(_) => not_found(),
     }
+}
+
+/// The first byte range in a Range header ("bytes=0-", "bytes=100-199", "bytes=-500") for a file
+/// of `len` bytes, as inclusive (start, end). Open-ended ranges get at most 4 MB at a time; the
+/// player simply asks for the next piece. None if the range can't be served.
+fn byte_range(header: &str, len: u64) -> Option<(u64, u64)> {
+    const PIECE: u64 = 4 * 1024 * 1024;
+    let spec = header.trim().strip_prefix("bytes=")?.split(',').next()?.trim();
+    let (a, b) = spec.split_once('-')?;
+    let (a, b) = (a.trim(), b.trim());
+    if len == 0 {
+        return None;
+    }
+    let (start, end) = if a.is_empty() {
+        let n: u64 = b.parse().ok()?;
+        if n == 0 {
+            return None;
+        }
+        (len.saturating_sub(n), len - 1)
+    } else {
+        let start: u64 = a.parse().ok()?;
+        let end = if b.is_empty() {
+            start.saturating_add(PIECE - 1)
+        } else {
+            b.parse().ok()?
+        };
+        (start, end.min(len - 1))
+    };
+    (start <= end && start < len).then_some((start, end))
 }
 
 // ------------------------------------------------------------------ app
@@ -395,7 +495,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(state)
-        .register_uri_scheme_protocol("csfiles", |ctx, request| serve_file(ctx.app_handle(), request.uri().path()))
+        .register_uri_scheme_protocol("csfiles", |ctx, request| serve_file(ctx.app_handle(), &request))
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let st = window.state::<AppState>();
@@ -421,6 +521,8 @@ pub fn run() {
             save_post,
             delete_post,
             save_image,
+            save_video_chunk,
+            discard_video,
             export_docx,
             open_export,
             get_categories,
@@ -437,4 +539,26 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running CrowderSphere");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::byte_range;
+
+    #[test]
+    fn ranges() {
+        let mb = 1024 * 1024;
+        assert_eq!(byte_range("bytes=0-", 100), Some((0, 99)));
+        assert_eq!(byte_range("bytes=0-", 10 * mb), Some((0, 4 * mb - 1)));
+        assert_eq!(byte_range("bytes=10-19", 100), Some((10, 19)));
+        assert_eq!(byte_range("bytes=90-500", 100), Some((90, 99)));
+        assert_eq!(byte_range("bytes=-10", 100), Some((90, 99)));
+        assert_eq!(byte_range("bytes=-500", 100), Some((0, 99)));
+        assert_eq!(byte_range("bytes=0-9, 20-29", 100), Some((0, 9)));
+        assert_eq!(byte_range("bytes=100-", 100), None);
+        assert_eq!(byte_range("bytes=20-10", 100), None);
+        assert_eq!(byte_range("bytes=0-", 0), None);
+        assert_eq!(byte_range("items=0-1", 100), None);
+        assert_eq!(byte_range("bytes=x-", 100), None);
+    }
 }

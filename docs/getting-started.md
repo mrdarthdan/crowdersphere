@@ -9,11 +9,12 @@ This guide takes about ten minutes to read. You can also take the one-minute tou
 - [3. Connect your blog](#3-connect-your-blog)
 - [4. Write a post](#4-write-a-post)
 - [5. Add and arrange pictures](#5-add-and-arrange-pictures)
-- [6. Categories, tags and the featured image](#6-categories-tags-and-the-featured-image)
-- [7. Preview and Export to Word](#7-preview-and-export-to-word)
-- [8. Send it to WordPress](#8-send-it-to-wordpress)
-- [9. Where your posts are kept](#9-where-your-posts-are-kept)
-- [10. Updates](#10-updates)
+- [6. Add videos](#6-add-videos)
+- [7. Categories, tags and the featured image](#7-categories-tags-and-the-featured-image)
+- [8. Preview and Export to Word](#8-preview-and-export-to-word)
+- [9. Send it to WordPress](#9-send-it-to-wordpress)
+- [10. Where your posts are kept](#10-where-your-posts-are-kept)
+- [11. Updates](#11-updates)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Getting help](#getting-help)
 
@@ -81,7 +82,7 @@ The toolbar, from left to right:
 
 **Pasting from Word, Google Docs or a web page** keeps headings, bold, italic, lists and links, and drops the clutter: odd fonts, colors and spacing.
 
-The bar at the bottom shows the word count, how many pictures the post has, and roughly how long it takes to read. Select some text to count just that part. The **− 100% +** buttons zoom the page.
+The bar at the bottom shows the word count, how many pictures and videos the post has, and roughly how long it takes to read. Select some text to count just that part. The **− 100% +** buttons zoom the page.
 
 ## 5. Add and arrange pictures
 
@@ -106,7 +107,21 @@ Large photos are shrunk to a web-friendly size (1920 pixels wide, which you can 
 
 Press **Esc** or click in the text to put the picture down.
 
-## 6. Categories, tags and the featured image
+## 6. Add videos
+
+Click the **Video** button on the toolbar. There are two kinds of video:
+
+- **A YouTube or Vimeo link.** Paste the video's address and click **Add video**. The video stays on YouTube or Vimeo, and WordPress shows its player in your post. Quicker still: paste the link on an empty line and it becomes the video straight away. TikTok and Dailymotion links work too.
+- **A video file from your computer** (MP4, MOV or WebM). Click **Choose a video file...**, or drag the file onto the page. CrowderSphere copies it into the post's `videos` folder and makes a still picture from it to show before it plays. The video is uploaded to your WordPress Media Library when you send the post.
+
+Click a video to get the same toolbar as a picture: align, size, caption, move up or down, and delete. In the editor, click the small **Video** label above a video file to select it; clicking the video itself plays it.
+
+**Before you add video files, check two things:**
+
+- **Your site has to accept big files.** WordPress hosts limit how big an upload can be, often 64 to 128 MB on shared hosting, and WordPress.com only allows video uploads on its paid plans. If a video is too big, CrowderSphere says so when you send the post. Ask your host to raise the limit, make the video smaller, or put it on YouTube and add the link instead.
+- **Use MP4 (H.264) videos.** iPhones and many Android phones record HEVC (H.265) by default, which a lot of browsers can't play. CrowderSphere warns you when a video is HEVC. On an iPhone, choose **Settings → Camera → Formats → Most Compatible** for new videos. Convert ones you already have with a free app such as HandBrake.
+
+## 7. Categories, tags and the featured image
 
 These are in the panel on the right.
 
@@ -117,12 +132,12 @@ These are in the panel on the right.
 - **Tags**: type them separated by commas. Tags your blog doesn't have yet are created when you send the post.
 - **Featured image**: choose one here, drop a picture onto the box, or click a picture in the post and choose **★ Featured**.
 
-## 7. Preview and Export to Word
+## 8. Preview and Export to Word
 
 - **Preview** shows the post as a clean page, without the editing tools.
-- **Export to Word** saves the post as a Word document (`.docx`) in the post's folder, with its pictures, ready to open, proofread or share.
+- **Export to Word** saves the post as a Word document (`.docx`) in the post's folder, with its pictures, ready to open, proofread or share. Word can't play videos, so each one shows as a line with its link or file name.
 
-## 8. Send it to WordPress
+## 9. Send it to WordPress
 
 Click **Send to WordPress**.
 
@@ -134,11 +149,11 @@ Choose one:
 - **Publish now**: the post goes live right away.
 - **Schedule for later**: pick a date and time. WordPress publishes it then, so your computer doesn't need to be on.
 
-Under the choices, CrowderSphere lists anything you might want to fix first, such as a missing title, category, featured image or alt text, and how many pictures it will upload. Then click **Send**.
+Under the choices, CrowderSphere lists anything you might want to fix first, such as a missing title, category, featured image or alt text, and how many pictures and videos it will upload. Then click **Send**. While a video uploads, the window shows how far along it is.
 
-**Changed something after sending?** Edit the post in CrowderSphere and click **Send to WordPress** again. It updates the same post on your blog rather than making a new one, and only uploads pictures that are new or changed. The **WordPress** box in the panel shows the post's status and a link to it.
+**Changed something after sending?** Edit the post in CrowderSphere and click **Send to WordPress** again. It updates the same post on your blog rather than making a new one, and only uploads pictures and videos that are new or changed. The **WordPress** box in the panel shows the post's status and a link to it.
 
-## 9. Where your posts are kept
+## 10. Where your posts are kept
 
 Every post is a folder on your computer, by default inside **Blog Posts** in your Documents folder:
 
@@ -148,6 +163,7 @@ Blog Posts/
     post.html     the post itself
     post.json     title, categories, tags and WordPress details
     images/       the post's pictures
+    videos/       the post's video files (when it has any)
 ```
 
 - **Folder** at the bottom left opens this folder. **Show in folder** in the panel opens the current post's own folder.
@@ -155,7 +171,7 @@ Blog Posts/
 - To keep posts somewhere else, change **Folder for posts on this computer** in Settings. Existing posts stay where they are, so move them yourself if you want them in the new place.
 - **Delete post** moves the post's folder to the Recycle Bin (the Trash on a Mac), so you can get it back. It doesn't delete anything on your blog.
 
-## 10. Updates
+## 11. Updates
 
 A few seconds after it starts, CrowderSphere checks for a new version. If there is one, it shows you what's new and offers **Update now**. That saves your post, installs the update and reopens CrowderSphere. Your posts and settings are kept.
 
@@ -173,8 +189,8 @@ On a Mac, use **Cmd** where this says **Ctrl**.
 | **Ctrl+K** | Add or edit a link |
 | **Ctrl+Z / Ctrl+Y** | Undo / redo (on a Mac, redo is **Cmd+Shift+Z**) |
 | **Ctrl+ + / Ctrl+ − / Ctrl+0** | Zoom in / out / back to 100% (or **Ctrl + mouse wheel**) |
-| **Delete** | Remove the selected picture |
-| **Esc** | Put down the selected picture; close a window |
+| **Delete** | Remove the selected picture or video |
+| **Esc** | Put down the selected picture or video; close a window |
 
 ## Getting help
 

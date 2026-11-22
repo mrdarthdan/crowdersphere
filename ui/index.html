@@ -39,8 +39,8 @@ button.ghost:hover{background:var(--soft)}
 button:disabled{opacity:.5;cursor:default}
 input[type=text],input[type=url],input[type=password],input[type=number],input[type=datetime-local],textarea,select{border:1px solid var(--line);border-radius:7px;padding:7px 9px;background:var(--paper);width:100%}
 input:focus,textarea:focus,select:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
-label.field{display:block;margin:0 0 12px}
-label.field>span{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.03em}
+label.field,div.field{display:block;margin:0 0 12px}
+label.field>span,div.field>span{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.03em}
 .hint{font-size:12px;color:var(--muted);margin-top:4px}
 
 #app{display:grid;grid-template-columns:clamp(200px,17vw,280px) minmax(0,1fr) auto;height:100vh}
@@ -128,6 +128,9 @@ label.field>span{display:block;font-size:12px;font-weight:600;color:var(--muted)
 #editor .cs-play{position:absolute;left:50%;top:50%;width:68px;height:48px;margin:-24px 0 0 -34px;background:rgba(0,0,0,.7);border-radius:12px}
 #editor .cs-play::after{content:"";position:absolute;left:27px;top:14px;border-style:solid;border-width:10px 0 10px 18px;border-color:transparent transparent transparent #fff}
 #editor .cs-video-label{position:absolute;left:0;right:0;bottom:0;padding:6px 10px;background:linear-gradient(transparent,rgba(0,0,0,.75));color:#fff;font:12px "Segoe UI",sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#editor figure.cs-videofile video{display:block;width:100%;height:auto;background:#000;border-radius:2px}
+#editor .cs-video-handle{font:600 11px "Segoe UI",sans-serif;color:var(--muted);padding:3px 2px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#editor figure.cs-videofile:hover .cs-video-handle,#editor figure.cs-videofile.is-selected .cs-video-handle{color:var(--accent)}
 #editor figure.is-featured::before{content:"\2605 Featured";position:absolute;top:8px;left:8px;background:rgba(0,0,0,.65);color:#fff;font:600 11px "Segoe UI",sans-serif;padding:2px 8px;border-radius:99px;z-index:1}
 
 #statusbar{display:flex;justify-content:space-between;gap:12px;padding:5px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);background:var(--panel)}
@@ -318,7 +321,7 @@ ol.steps{padding-left:20px;margin:6px 0;font-size:13px;color:var(--muted)}
       <button data-act="link" title="Insert link (Ctrl+K)"><svg><use href="#i-link"/></svg></button>
       <button data-cmd="unlink" title="Remove link"><svg><use href="#i-unlink"/></svg></button>
       <button data-act="image" title="Insert picture"><svg><use href="#i-img"/></svg></button>
-      <button data-act="video" title="Insert video (YouTube or Vimeo link)"><svg><use href="#i-video"/></svg></button>
+      <button data-act="video" title="Insert video (a file from your computer, or a YouTube or Vimeo link)"><svg><use href="#i-video"/></svg></button>
       <button data-act="hr" title="Divider line"><svg><use href="#i-hr"/></svg></button>
       <span class="sep"></span>
       <button data-cmd="removeFormat" title="Clear formatting"><svg><use href="#i-clear"/></svg></button>
@@ -392,6 +395,7 @@ ol.steps{padding-left:20px;margin:6px 0;font-size:13px;color:var(--muted)}
 <div id="modalBack" hidden></div>
 <div id="toasts"></div>
 <input id="filePick" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden>
+<input id="videoPick" type="file" accept="video/mp4,video/quicktime,video/webm,video/x-m4v,.mp4,.m4v,.mov,.webm" multiple hidden>
 <input id="featuredPick" type="file" accept="image/jpeg,image/png,image/gif,image/webp" hidden>
 
 <script src="/bridge.js"></script>
@@ -694,7 +698,7 @@ const ed = CSE.create({
   toRel: src => CS.relFromUrl(src) || src,
   isFeatured: rel => !!(rel && state.current && state.current.meta.featured === rel),
   transformPastedHTML: html => /data-pm-slice/.test(html) ? html : sanitize(html),   // copy/paste inside the editor keeps everything
-  onFiles: (files, pos) => insertImages(files, pos),
+  onFiles: (files, pos) => insertMedia(files, pos),
   onChange: () => markDirty(),
   onSelection: () => { updateToolbarState(); updateSelCount(); syncFigSelection(); }
 });
@@ -913,11 +917,11 @@ wrap.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('File
 wrap.addEventListener('drop', e => {
   dragDepth = 0; wrap.classList.remove('dragging');
   if (e.defaultPrevented) return;   // dropped on the text: the editor placed it already
-  const files = Array.from(e.dataTransfer.files || []).filter(f => f.type.startsWith('image/'));
+  const files = Array.from(e.dataTransfer.files || []).filter(f => f.type.startsWith('image/') || CSE.isVideoFile(f));
   if (!files.length) return;
   e.preventDefault();
-  if (state.sourceMode) { toast('Switch out of HTML view to add pictures.'); return; }
-  insertImages(files, null);   // dropped beside the page: add at the end
+  if (state.sourceMode) { toast('Switch out of HTML view to add pictures and videos.'); return; }
+  insertMedia(files, null);   // dropped beside the page: add at the end
 });
 $('#filePick').addEventListener('change', e => {
   const files = Array.from(e.target.files || []); e.target.value = '';
@@ -972,7 +976,10 @@ function insertVideo() {
   if (!state.current) return;
   if (state.sourceMode) { toast('Switch out of HTML view to add videos.'); return; }
   const pos = ed.tiptap.state.selection.from;
-  const body = `<label class="field"><span>YouTube or Vimeo link</span><input type="text" id="vidUrl" placeholder="https://www.youtube.com/watch?v=...">
+  const body = `<div class="field"><span>A video file from your computer</span>
+      <div><button type="button" id="vidFileBtn">Choose a video file...</button></div>
+      <div class="hint">MP4, MOV or WebM. It's uploaded to your WordPress Media Library with the post, so your site has to allow files that big. You can also drop a video onto the page.</div></div>
+    <label class="field"><span>Or a YouTube or Vimeo link</span><input type="text" id="vidUrl" placeholder="https://www.youtube.com/watch?v=...">
       <div class="hint">The video stays on YouTube or Vimeo, and WordPress shows its player in the post. TikTok and Dailymotion links work too.<br>Tip: pasting a video link on an empty line adds it straight away.</div></label>
     <div id="vidErr" class="result-bad"></div>`;
   const m = openModal({ title: 'Add a video', body, buttons: [
@@ -986,6 +993,111 @@ function insertVideo() {
     } }
   ] });
   $('#vidUrl', m.el).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('footer button.primary', m.el).click(); } });
+  $('#vidFileBtn', m.el).addEventListener('click', () => { state.videoPos = pos; m.close(); $('#videoPick').click(); });
+}
+$('#videoPick').addEventListener('change', e => {
+  const files = Array.from(e.target.files || []); e.target.value = '';
+  if (files.length) insertVideoFiles(files, state.videoPos != null ? state.videoPos : ed.tiptap.state.selection.from);
+  state.videoPos = null;
+});
+
+// Pictures and videos dropped or pasted together go to the right place each
+async function insertMedia(files, pos) {
+  const vids = files.filter(f => CSE.isVideoFile(f)), pics = files.filter(f => !CSE.isVideoFile(f));
+  if (pics.length) await insertImages(pics, pos);
+  if (vids.length) await insertVideoFiles(vids, pics.length ? null : pos);
+}
+
+// A video file from the computer: copied into the post's videos folder (a piece at a time, so a big
+// video never has to fit in memory), then uploaded to the Media Library when the post is sent.
+const VIDEO_PIECE = 8 * 1024 * 1024;
+function uploadId() { return Array.from(crypto.getRandomValues(new Uint8Array(16)), b => (b % 36).toString(36)).join(''); }
+function fmtMB(bytes) { const mb = bytes / 1048576; return (mb >= 100 ? Math.round(mb) : mb.toFixed(1)) + ' MB'; }
+async function sendVideo(postId, file, onProgress) {
+  const upload = uploadId(), name = file.name || 'video.mp4';
+  const q = `id=${encodeURIComponent(postId)}&name=${encodeURIComponent(name)}&upload=${upload}`;
+  try {
+    for (let offset = 0; ; offset += VIDEO_PIECE) {
+      const end = Math.min(offset + VIDEO_PIECE, file.size), last = end >= file.size;
+      const r = await api(`/api/video-chunk?${q}&offset=${offset}&last=${last ? 1 : 0}`, { body: file.slice(offset, end) });
+      onProgress(file.size ? end / file.size : 1);
+      if (last) return r.src;
+    }
+  } catch (e) {
+    api(`/api/video-discard?id=${encodeURIComponent(postId)}&upload=${upload}`, { method: 'POST' }).catch(() => {});
+    throw e;
+  }
+}
+// Phones often record HEVC (H.265), which many browsers can't play. Its track is marked 'hvc1' or
+// 'hev1' near the start or the end of the file.
+async function isHevc(file) {
+  const look = async blob => /hvc1|hev1/.test(new TextDecoder('latin1').decode(new Uint8Array(await blob.arrayBuffer())));
+  const span = 4 * 1024 * 1024;
+  try { return await look(file.slice(0, span)) || (file.size > span && await look(file.slice(Math.max(span, file.size - span)))); }
+  catch (e) { return false; }
+}
+// Can this computer's browser engine play it? If so, grab a frame to show before the video plays.
+async function inspectVideo(file) {
+  const out = { hevc: await isHevc(file), playable: false, poster: null };
+  const url = URL.createObjectURL(file);
+  const v = document.createElement('video');
+  v.muted = true; v.preload = 'auto'; v.playsInline = true;
+  const wait = (ev, ms) => new Promise(res => { const t = setTimeout(() => res(false), ms); v.addEventListener(ev, () => { clearTimeout(t); res(true); }, { once: true }); v.addEventListener('error', () => { clearTimeout(t); res(false); }, { once: true }); });
+  try {
+    const loaded = wait('loadeddata', 15000);
+    v.src = url;
+    out.playable = await loaded && v.videoWidth > 0;
+    if (out.playable) {
+      const at = Math.min(1, (v.duration || 0) / 3);
+      if (at > 0.05) { const seeked = wait('seeked', 8000); v.currentTime = at; await seeked; }
+      const max = (state.settings && state.settings.maxImageWidth) || 1920, scale = Math.min(1, max / v.videoWidth);
+      const c = document.createElement('canvas');
+      c.width = Math.round(v.videoWidth * scale); c.height = Math.round(v.videoHeight * scale);
+      c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+      out.poster = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.86));
+    }
+  } catch (e) {}
+  finally { v.removeAttribute('src'); v.load(); URL.revokeObjectURL(url); }
+  return out;
+}
+function askAddVideoAnyway(file, info) {
+  const why = info.hevc
+    ? `<p><b>${esc(file.name)}</b> is recorded in HEVC (H.265), the format iPhones and many Android phones use by default. A lot of browsers can't play it, so visitors may just see a blank box.</p>`
+    : `<p>CrowderSphere couldn't play <b>${esc(file.name)}</b>, so web browsers may not be able to either.</p>`;
+  return new Promise(resolve => {
+    openModal({ title: 'This video may not play on your blog', body: why +
+      `<p>For videos that play everywhere, save them as <b>MP4 (H.264)</b>:</p>
+       <ul><li><b>iPhone:</b> Settings &rarr; Camera &rarr; Formats &rarr; <b>Most Compatible</b> (for new videos).</li>
+       <li><b>Videos you already have:</b> convert them with a free app such as HandBrake, using its "Fast 1080p30" preset.</li>
+       <li>Or upload it to YouTube or Vimeo and add the link instead.</li></ul>`,
+      buttons: [{ label: 'Cancel', action: () => resolve(false) }, { label: 'Add it anyway', primary: true, action: () => resolve(true) }],
+      onClose: () => resolve(false) });
+  });
+}
+async function insertVideoFiles(files, pos) {
+  if (!state.current) return;
+  if (state.sourceMode) { toast('Switch out of HTML view to add videos.'); return; }
+  try { await ensureSaved(); } catch (e) { toast(e.message, 'error'); return; }
+  const post = state.current;
+  let count = 0;
+  for (const file of files) {
+    if (!/\.(mp4|m4v|mov|webm)$/i.test(file.name || '')) { toast(`${file.name || 'That file'}: use MP4, MOV, M4V or WebM videos.`, 'error'); continue; }
+    setSaveState('Checking video...');
+    const info = await inspectVideo(file);
+    if ((info.hevc || !info.playable) && !(await askAddVideoAnyway(file, info))) continue;
+    try {
+      const src = await sendVideo(post.id, file, f => setSaveState(`Adding ${file.name}... ${Math.round(f * 100)}% of ${fmtMB(file.size)}`));
+      let poster = '';
+      if (info.poster) {
+        const name = (file.name || 'video').replace(/\.[^.]+$/, '') + '-poster.jpg';
+        try { poster = (await api(`/api/image?id=${encodeURIComponent(post.id)}&name=${encodeURIComponent(name)}`, { body: info.poster })).src; } catch (e) {}
+      }
+      if (state.current !== post) { toast(`${file.name} was saved in "${post.meta.title || 'Untitled'}"'s folder, but you'd switched posts, so it isn't in the post yet.`); continue; }
+      pos = ed.insertFigure({ src, poster, caption: '', align: 'aligncenter', width: 100 }, pos, 'videoFile');
+      count++;
+    } catch (e) { toast('Video not added: ' + e.message, 'error'); }
+  }
+  if (!count) setSaveState(state.dirty ? 'Editing...' : 'Saved');
 }
 
 function figRel(fig) { return (fig && fig.dataset && fig.dataset.rel) || ''; }
@@ -1283,6 +1395,7 @@ $('#publishBtn').addEventListener('click', async () => {
   const m = state.current.meta;
   const html = currentHtml();
   const nImgs = (html.match(/src="(\/files\/[^"]+|images\/[^"]+)"/g) || []).length;
+  const nVids = new Set(html.match(/src="videos\/[^"]+"/g) || []).size;
   const missingAlt = $$('figure.wp-block-image img', editor).filter(i => !i.alt).length;
   const checks = [];
   if (!m.title.trim()) checks.push('<li class="warn">&#9888; The post needs a title.</li>');
@@ -1291,6 +1404,7 @@ $('#publishBtn').addEventListener('click', async () => {
   if (!m.featured) checks.push('<li class="warn">&#9888; No featured image.</li>');
   if (missingAlt) checks.push(`<li class="warn">&#9888; ${missingAlt} picture${missingAlt > 1 ? 's have' : ' has'} no alt text.</li>`);
   if (nImgs) checks.push(`<li>&#10003; ${nImgs} picture${nImgs > 1 ? 's' : ''} will be uploaded (only new or changed ones are re-sent).</li>`);
+  if (nVids) checks.push(`<li>&#10003; ${nVids} video${nVids > 1 ? 's' : ''} will be uploaded the first time (big videos take a while, and your site has to allow files that size).</li>`);
   const isLive = m.wpStatus === 'publish';
   const isSched = m.wpStatus === 'future';
   const host = esc(siteBase().replace(/^https?:\/\//, ''));
@@ -1326,10 +1440,19 @@ $('#publishBtn').addEventListener('click', async () => {
       }
       btn.disabled = true;
       $('#pubResult', el).innerHTML = '<span class="spinner"></span>Saving, uploading pictures and sending the post...';
+      let sending = true;
+      const stopProgress = await CS.onPublishProgress(p => {
+        if (!sending || !p.total) return;
+        const pct = Math.min(100, Math.round(p.done / p.total * 100));
+        $('#pubResult', el).innerHTML = pct < 100
+          ? `<span class="spinner"></span>Uploading ${esc(p.file)}... ${pct}% (${fmtMB(p.done)} of ${fmtMB(p.total)})`
+          : `<span class="spinner"></span>Uploaded ${esc(p.file)}. WordPress is processing it...`;
+      });
       try {
         await flushSave();
         const cur = state.current;
         const r = await api('/api/publish', { json: { id: cur.id, status, html: currentHtml(), scheduleAt } });
+        sending = false;
         Object.assign(cur.meta, { wpId: r.meta.wpId, wpLink: r.meta.wpLink, wpStatus: r.meta.wpStatus, published: r.meta.published, scheduled: r.meta.scheduled || '', modified: r.meta.modified, media: r.meta.media });
         renderWpStatus(); await refreshList();
         finished = true;
@@ -1341,9 +1464,10 @@ $('#publishBtn').addEventListener('click', async () => {
         btn.textContent = 'Done'; btn.disabled = false;
         toast(word, 'ok');
       } catch (e) {
-        $('#pubResult', el).innerHTML = `<span class="result-bad">Not sent:</span> ${esc(e.message)}`;
+        sending = false;
+        $('#pubResult', el).innerHTML = `<span class="result-bad">Not sent:</span> ${esc(e.message).replace(/\n/g, '<br>')}`;
         btn.disabled = false;
-      }
+      } finally { stopProgress(); }
       return false;
     } }
   ] });

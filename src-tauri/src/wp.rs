@@ -2,9 +2,16 @@
 //! Authentication uses a WordPress Application Password over HTTP Basic auth.
 
 use crate::posts::{self, str_of, Res};
+use futures_util::StreamExt;
 use serde_json::{json, Map, Value};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
+
+/// Called while a big file uploads, with (bytes sent, total bytes).
+pub type Progress = Arc<dyn Fn(u64, u64) + Send + Sync>;
+/// Publishing progress for the editor: {file, done, total}.
+pub type Report = Arc<dyn Fn(Value) + Send + Sync>;
 
 /// Everything needed to talk to the site, copied out of Settings so no lock is held
 /// while waiting on the network.
@@ -40,6 +47,8 @@ pub enum Body {
     None,
     Json(Value),
     Bytes(Vec<u8>, String),
+    /// A file sent straight from disk (videos), with its type, size and a progress callback.
+    File(PathBuf, String, u64, Progress),
 }
 
 fn client() -> reqwest::Client {
@@ -153,6 +162,28 @@ impl Wp {
             Body::None => req,
             Body::Json(v) => req.json(&v),
             Body::Bytes(b, ct) => req.header("Content-Type", ct).body(b),
+            Body::File(path, ct, len, progress) => {
+                let file = tokio::fs::File::open(&path)
+                    .await
+                    .map_err(|e| wp_err(format!("Couldn't read {}: {e}", path.display())))?;
+                let (mut sent, mut shown) = (0u64, u64::MAX);
+                let stream = tokio_util::io::ReaderStream::with_capacity(file, 256 * 1024).inspect(move |piece| {
+                    if let Ok(b) = piece {
+                        sent += b.len() as u64;
+                        let pct = sent.saturating_mul(100) / len.max(1);
+                        if pct != shown {
+                            shown = pct;
+                            progress(sent, len);
+                        }
+                    }
+                });
+                // Content-Length up front (some hosts refuse uploads without it), and time enough
+                // for a slow connection: at least 100 KB a second, never less than the usual 10 minutes.
+                req.header("Content-Type", ct)
+                    .header("Content-Length", len.to_string())
+                    .timeout(Duration::from_secs((len / 100_000).max(600)))
+                    .body(reqwest::Body::wrap_stream(stream))
+            }
         };
         let resp = req
             .send()
@@ -312,10 +343,11 @@ fn existing_term_id(e: &WpError) -> Option<i64> {
     b.get("data")?.get("term_id")?.as_i64()
 }
 
-/// Upload a local picture to the Media Library unless the same file was uploaded before.
-async fn ensure_media(wp: &Wp, dir: &Path, meta: &mut Map<String, Value>, rel: &str) -> Res<Value> {
-    let path = posts::image_path(dir, rel)?;
-    let md = std::fs::metadata(&path).map_err(|_| format!("Image file is missing: {rel}"))?;
+/// Upload a local picture or video to the Media Library unless the same file was uploaded before.
+async fn ensure_media(wp: &Wp, dir: &Path, meta: &mut Map<String, Value>, rel: &str, report: &Report) -> Res<Value> {
+    let path = posts::media_path(dir, rel)?;
+    let what = if posts::is_video(rel) { "Video" } else { "Image" };
+    let md = std::fs::metadata(&path).map_err(|_| format!("{what} file is missing: {rel}"))?;
     let size = md.len();
     let mtime = posts::dotnet_ticks(md.modified().map_err(|e| e.to_string())?);
     if let Some(prev) = meta.get("media").and_then(|m| m.get(rel)) {
@@ -326,17 +358,34 @@ async fn ensure_media(wp: &Wp, dir: &Path, meta: &mut Map<String, Value>, rel: &
             return Ok(prev.clone());
         }
     }
-    let bytes = std::fs::read(&path).map_err(|e| format!("Couldn't read {rel}: {e}"))?;
     let fname = path.file_name().unwrap().to_string_lossy().into_owned();
+    let body = if posts::is_video(rel) {
+        // Videos can be hundreds of MB: send them from disk, telling the editor how far along it is
+        let report = report.clone();
+        let label = fname.clone();
+        let progress: Progress = Arc::new(move |done, total| report(json!({ "file": label, "done": done, "total": total })));
+        progress(0, size);
+        Body::File(path.clone(), posts::mime_of(&path).into(), size, progress)
+    } else {
+        let bytes = std::fs::read(&path).map_err(|e| format!("Couldn't read {rel}: {e}"))?;
+        Body::Bytes(bytes, posts::mime_of(&path).into())
+    };
     let r = wp
         .call(
             "POST",
             "/wp/v2/media",
             "",
-            Body::Bytes(bytes, posts::mime_of(&path).into()),
+            body,
             &[("Content-Disposition", format!("attachment; filename=\"{fname}\""))],
         )
-        .await?;
+        .await
+        .map_err(|e| {
+            if posts::is_video(rel) {
+                video_upload_error(e, &fname, size)
+            } else {
+                e.msg
+            }
+        })?;
     let entry = json!({ "id": r.get("id"), "url": r.get("source_url"), "size": size, "mtime": mtime });
     if let Some(Value::Object(media)) = meta.get_mut("media") {
         media.insert(rel.into(), entry.clone());
@@ -371,17 +420,54 @@ pub fn parse_utc(s: &str) -> Option<chrono::DateTime<chrono::Utc>> {
     None
 }
 
-/// Point local image paths at their uploaded copies, and drop editor-only attributes.
+/// Explain why a video didn't upload when the likely cause is the site's own limits.
+fn video_upload_error(e: WpError, fname: &str, size: u64) -> String {
+    let code = e
+        .body
+        .as_ref()
+        .and_then(|b| b.get("code"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let msg = e.msg.to_lowercase();
+    let mb = (size as f64 / 1_048_576.0).round();
+    if msg.contains("file type") || msg.contains("not allowed") || (code == "rest_upload_sideload_error" && msg.contains("type"))
+    {
+        return format!(
+            "{}\n\nYour site doesn't accept this kind of video. On WordPress.com, video uploads need a paid plan. \
+             You can put the video on YouTube or Vimeo and add its link instead.",
+            e.msg
+        );
+    }
+    let too_big = e.status == Some(413)
+        || e.status.is_none()
+        || ["rest_upload_no_data", "rest_upload_unknown_error", "rest_upload_file_too_big"].contains(&code)
+        || ["upload_max_filesize", "post_max_size", "too large", "exceeds", "memory"]
+            .iter()
+            .any(|w| msg.contains(w));
+    if too_big {
+        return format!(
+            "{}\n\n{fname} is {mb} MB, which may be bigger than your site accepts. Your hosting plan and its PHP upload \
+             limit (upload_max_filesize) decide that. Ask your host to raise the limit, make the video smaller, \
+             or put it on YouTube or Vimeo and add its link instead.",
+            e.msg
+        );
+    }
+    e.msg
+}
+
+/// Point local picture and video paths at their uploaded copies, and drop editor-only attributes.
 pub fn rewrite_content(html: &str, uploaded: &[(String, Value)]) -> String {
     let mut content = html.to_string();
     for (rel, media) in uploaded {
-        let from = format!("src=\"{rel}\"");
-        let to = format!(
-            "src=\"{}\" class=\"wp-image-{}\"",
-            str_of(media.get("url")).replace('"', "&quot;"),
-            str_of(media.get("id"))
-        );
-        content = content.replace(&from, &to);
+        let url = str_of(media.get("url")).replace('"', "&quot;");
+        if posts::is_video(rel) {
+            content = content.replace(&format!("src=\"{rel}\""), &format!("src=\"{url}\""));
+        } else {
+            let to = format!("src=\"{url}\" class=\"wp-image-{}\"", str_of(media.get("id")));
+            content = content.replace(&format!("src=\"{rel}\""), &to);
+            // a video's poster (the picture shown before it plays)
+            content = content.replace(&format!("poster=\"{rel}\""), &format!("poster=\"{url}\""));
+        }
     }
     regex::Regex::new(r#"\s(contenteditable|data-[a-z-]+)="[^"]*""#)
         .unwrap()
@@ -389,8 +475,9 @@ pub fn rewrite_content(html: &str, uploaded: &[(String, Value)]) -> String {
         .into_owned()
 }
 
-pub fn image_refs(html: &str) -> Vec<String> {
-    let re = regex::Regex::new(r#"src="(images/[^"]+)""#).unwrap();
+/// The post's own pictures and videos: src="images/..." / src="videos/..." and video posters.
+pub fn media_refs(html: &str) -> Vec<String> {
+    let re = regex::Regex::new(r#"(?:src|poster)="((?:images|videos)/[^"]+)""#).unwrap();
     let mut out: Vec<String> = Vec::new();
     for c in re.captures_iter(html) {
         let r = c[1].to_string();
@@ -402,7 +489,7 @@ pub fn image_refs(html: &str) -> Vec<String> {
 }
 
 /// Send a post (and its pictures) to WordPress. status: draft | publish | future | keep | pending | private.
-pub async fn publish(wp: &Wp, root: &Path, id: &str, status: &str, html: &str, schedule_at: &str) -> Res<Value> {
+pub async fn publish(wp: &Wp, root: &Path, id: &str, status: &str, html: &str, schedule_at: &str, report: Report) -> Res<Value> {
     let dir = posts::post_dir(root, id)?;
     let mut meta = posts::load_meta(&dir);
     let title = str_of(meta.get("title"));
@@ -416,10 +503,10 @@ pub async fn publish(wp: &Wp, root: &Path, id: &str, status: &str, html: &str, s
         html.to_string()
     };
 
-    // 1. Upload every local picture the post uses
+    // 1. Upload every local picture and video the post uses
     let mut uploaded = Vec::new();
-    for rel in image_refs(&html) {
-        let m = ensure_media(wp, &dir, &mut meta, &rel).await?;
+    for rel in media_refs(&html) {
+        let m = ensure_media(wp, &dir, &mut meta, &rel, &report).await?;
         uploaded.push((rel, m));
     }
     let content = rewrite_content(&html, &uploaded);
@@ -429,7 +516,7 @@ pub async fn publish(wp: &Wp, root: &Path, id: &str, status: &str, html: &str, s
     let featured_id = if featured.is_empty() {
         0
     } else {
-        ensure_media(wp, &dir, &mut meta, &featured)
+        ensure_media(wp, &dir, &mut meta, &featured, &report)
             .await?
             .get("id")
             .and_then(Value::as_i64)
@@ -602,7 +689,7 @@ mod tests {
     #[test]
     fn content_rewrite() {
         let html = r#"<figure contenteditable="false" data-size="m"><img src="images/a.jpg" alt=""></figure><p><img src="images/a.jpg"><img src="https://x/y.png"></p>"#;
-        let refs = image_refs(html);
+        let refs = media_refs(html);
         assert_eq!(refs, vec!["images/a.jpg"]);
         let out = rewrite_content(
             html,
@@ -612,6 +699,44 @@ mod tests {
         assert!(!out.contains("data-size"));
         assert_eq!(out.matches(r#"src="https://b.com/a.jpg" class="wp-image-7""#).count(), 2);
         assert!(out.contains("https://x/y.png"));
+    }
+
+    #[test]
+    fn video_rewrite() {
+        let html = r#"<figure class="wp-block-video aligncenter" style="width:100%"><video controls="" src="videos/clip.mp4" poster="images/clip-poster.jpg" preload="metadata"></video></figure>"#;
+        assert_eq!(media_refs(html), vec!["videos/clip.mp4", "images/clip-poster.jpg"]);
+        let out = rewrite_content(
+            html,
+            &[
+                ("videos/clip.mp4".into(), json!({ "id": 8, "url": "https://b.com/clip.mp4" })),
+                (
+                    "images/clip-poster.jpg".into(),
+                    json!({ "id": 9, "url": "https://b.com/clip-poster.jpg" }),
+                ),
+            ],
+        );
+        assert!(
+            out.contains(r#"src="https://b.com/clip.mp4" poster="https://b.com/clip-poster.jpg""#),
+            "{out}"
+        );
+        assert!(!out.contains("wp-image-8"));
+    }
+
+    #[test]
+    fn video_errors_explain_site_limits() {
+        let big = WpError {
+            status: Some(413),
+            msg: "WordPress said (HTTP 413): Request Entity Too Large".into(),
+            body: None,
+        };
+        let m = video_upload_error(big, "clip.mp4", 300 * 1_048_576);
+        assert!(m.contains("clip.mp4 is 300 MB") && m.contains("upload_max_filesize"), "{m}");
+        let other = WpError {
+            status: Some(500),
+            msg: "WordPress said (HTTP 500): oops".into(),
+            body: None,
+        };
+        assert_eq!(video_upload_error(other, "clip.mp4", 1), "WordPress said (HTTP 500): oops");
     }
 
     #[test]

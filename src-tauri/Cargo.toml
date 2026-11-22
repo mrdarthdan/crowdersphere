@@ -23,11 +23,13 @@ tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 trash = "5"
 chrono = "0.4"
-tokio = { version = "1", features = ["sync"] }
+tokio = { version = "1", features = ["sync", "fs"] }
+tokio-util = { version = "0.7", features = ["io"] }
+futures-util = "0.3"
 regex = "1"
 dirs = "5"
 html-escape = "0.2"
