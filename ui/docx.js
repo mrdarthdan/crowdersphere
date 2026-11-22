@@ -193,7 +193,8 @@
       return '';
     }
     async figure(fig) {
-      const img = fig.querySelector('img'); if (!img) return;
+      const img = fig.querySelector('img');
+      if (!img) { this.videoNote(fig); return; }
       const cap = fig.querySelector('figcaption');
       const caption = cap ? cap.textContent.trim() : '';
       const alt = img.getAttribute('alt') || '';
@@ -211,6 +212,18 @@
       const jc = align === 'right' ? 'right' : align === 'center' ? 'center' : 'left';
       this.body.push(this.para(this.drawing(loaded, width, alt, null), { jc, extraPr: '<w:keepNext/><w:spacing w:before="120" w:after="' + (caption ? 0 : 200) + '"/>' }));
       if (caption) this.body.push(this.para(this.run(caption, {}), { style: 'Caption', jc }));
+    }
+    // Word can't play videos: note where one is, with its link or file name, and the caption
+    videoNote(fig) {
+      const video = fig.querySelector('video'), source = fig.querySelector('video source[src]');
+      const wrap = fig.querySelector('.wp-block-embed__wrapper');
+      let what = '';
+      if (video) what = (video.getAttribute('src') || (source && source.getAttribute('src')) || 'video').split('/').pop();
+      else if (wrap && /^https?:\/\//.test(wrap.textContent.trim())) what = wrap.textContent.trim();
+      else return;
+      const cap = fig.querySelector('figcaption');
+      this.body.push(this.para(this.run('[Video: ' + what + ']', { i: true }), { jc: 'center', extraPr: '<w:keepNext/>' }));
+      if (cap && cap.textContent.trim()) this.body.push(this.para(this.run(cap.textContent.trim(), {}), { style: 'Caption', jc: 'center' }));
     }
     async flushLooseImages() {
       const list = this.looseImages || []; this.looseImages = [];

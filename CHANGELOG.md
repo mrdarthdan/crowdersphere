@@ -2,6 +2,12 @@
 
 Each release's notes are taken from its section here, so they show on the GitHub release page and in the app's **Update available** window. Add a section for the new version before releasing.
 
+## 2.4.0
+
+- **Videos** — the new **Video** button adds a YouTube or Vimeo link, which WordPress shows as a player, or a video file from your computer (MP4, MOV or WebM), which is uploaded to your Media Library with the post. You can also paste a video link on an empty line, or drag a video file onto the page.
+- Videos sit in the post like pictures: align, size, caption, move and delete them from the same toolbar.
+- CrowderSphere warns you about iPhone HEVC videos that many browsers can't play, and shows how far along a big video upload is when you send the post.
+
 ## 2.3.0
 
 - **Welcome tour** — a one-minute tour on first launch, and a **Welcome to CrowderSphere** sample post to experiment on.

@@ -160,6 +160,137 @@ console.log('Pictures');
   check(savedMeta().featured === 'images/pic.jpg', 'featured saved to post.json');
 }
 
+console.log('Video links');
+{
+  const lines = () => html().then(h => h.split('\n'));
+  await click('#editor h2');
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  await page.click('[data-act="video"]');
+  await page.waitForSelector('#vidUrl');
+  await page.fill('#vidUrl', 'not a video');
+  await page.click('#modalBack button.primary');
+  check(/isn't a YouTube/.test(await page.evaluate(() => $('#vidErr').textContent)), 'a non-video link is refused');
+  await page.fill('#vidUrl', 'https://www.youtube.com/embed/dQw4w9WgXcQ');
+  await page.click('#modalBack button.primary');
+  let h = await html();
+  check(/<figure class="wp-block-embed is-type-video is-provider-youtube wp-block-embed-youtube aligncenter wp-embed-aspect-16-9 wp-has-aspect-ratio" style="width: ?100%;?"><div class="wp-block-embed__wrapper">\nhttps:\/\/www\.youtube\.com\/watch\?v=dQw4w9WgXcQ\n<\/div><\/figure>/.test(h),
+    'YouTube link stored like WordPress\'s Embed block (address on its own line)', h.slice(h.indexOf('<figure class="wp-block-embed'), h.indexOf('<figure class="wp-block-embed') + 300));
+  check(await page.evaluate(() => !$('#imgbar').hidden && getComputedStyle($('#imgbar [data-img="featured"]')).display === 'none'), 'video is selected; its toolbar has no Featured button');
+  check(await page.evaluate(() => /YouTube video/.test(document.querySelector('#editor figure.cs-embed .cs-video-label').textContent)), 'editor shows a YouTube video card');
+  await page.click('#imgbar [data-img="alignright"]');
+  await page.click('#imgbar [data-img="details"]');
+  await page.waitForSelector('#modalBack:not([hidden]) textarea');
+  await page.fill('#modalBack textarea', 'Salt River horses');
+  await page.click('#modalBack button.primary');
+  h = await html();
+  check(/<figure class="wp-block-embed[^"]* alignright [^"]*" style="width: ?45%;?">[\s\S]*?<figcaption class="wp-element-caption">Salt River horses<\/figcaption><\/figure>/.test(h), 'align, size and caption on a video', h.slice(h.indexOf('<figure class="wp-block-embed'), h.indexOf('<figure class="wp-block-embed') + 400));
+  // pasting a link on an empty line makes it a video; inside a sentence it stays a link
+  await page.keyboard.press('Escape');
+  await click('#editor h2');
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  await page.evaluate(() => { const dt = new DataTransfer(); dt.setData('text/plain', 'https://vimeo.com/76979871'); ed.tiptap.view.dom.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); });
+  check((await lines()).some(l => /is-provider-vimeo/.test(l)) && (await html()).includes('\nhttps://vimeo.com/76979871\n'), 'pasted Vimeo link on an empty line becomes a video');
+  await page.keyboard.press('Escape');
+  await click('#editor h2');
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('See ');
+  await page.evaluate(() => { const dt = new DataTransfer(); dt.setData('text/plain', 'https://youtu.be/abcdefghijk'); ed.tiptap.view.dom.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); });
+  check(/<p>See <a href="https:\/\/youtu.be\/abcdefghijk">https:\/\/youtu.be\/abcdefghijk<\/a><\/p>/.test(await html()), 'a video link pasted inside a sentence stays a link', (await lines()).find(l => l.includes('See ')));
+  // reopening keeps everything exactly
+  const before = await html();
+  await page.evaluate(() => ed.setHTML(currentHtml()));
+  check(await html() === before, 'videos survive saving and reopening unchanged');
+  await flush();
+  check(saved().includes('wp-block-embed-youtube'), 'saved to post.html');
+  check(/2 videos/.test(await page.evaluate(() => $('#wordCount').textContent)), 'word count shows the videos', await page.evaluate(() => $('#wordCount').textContent));
+  const doc = await page.evaluate(async () => {
+    const blob = await window.buildDocx({ title: 'T', html: currentHtml(), font: 'Georgia', resolveSrc: s => /^images\//.test(s) ? fileUrl(s) : s });
+    return new TextDecoder().decode(new Uint8Array(await blob.arrayBuffer()));
+  });
+  check(doc.includes('[Video: https://www.youtube.com/watch?v=dQw4w9WgXcQ]') && doc.includes('Salt River horses'), 'Word export notes each video with its link and caption');
+  const prev = await page.evaluate(() => previewBody());
+  check(/cs-video-card/.test(prev) && /i\.ytimg\.com\/vi\/dQw4w9WgXcQ/.test(prev), 'preview shows the video picture');
+}
+
+console.log('Video files');
+{
+  const FIX = path.join(HERE, 'fixtures');
+  const vdir = path.join(posts, ID, 'videos');
+  const vidCount = () => page.evaluate(() => document.querySelectorAll('#editor figure.cs-videofile').length);
+  await page.keyboard.press('Escape');
+  await click('#editor h2');
+  await page.keyboard.press('End');
+  // a playable MP4 (H.264): added straight away, with a picture taken from it to show before it plays
+  await page.setInputFiles('#videoPick', path.join(FIX, 'clip.mp4'));
+  await page.waitForFunction(() => document.querySelectorAll('#editor figure.cs-videofile').length === 1, null, { timeout: 20000 });
+  check(fs.existsSync(path.join(vdir, 'clip.mp4')) && fs.statSync(path.join(vdir, 'clip.mp4')).size === fs.statSync(path.join(FIX, 'clip.mp4')).size, 'video copied into the post\'s videos folder');
+  check(fs.existsSync(path.join(posts, ID, 'images', 'clip-poster.jpg')), 'a poster picture is made from the video');
+  let h = await html();
+  check(/<figure class="wp-block-video aligncenter" style="width: ?100%;?"><video controls="" src="videos\/clip.mp4" poster="images\/clip-poster.jpg" preload="metadata"><\/video><\/figure>/.test(h),
+    'stored like WordPress\'s Video block, with relative paths', h.split('\n').find(l => l.includes('wp-block-video')));
+  check(await page.evaluate(() => !$('#imgbar').hidden && $('#imgbar [data-img="details"]').textContent === 'Caption'), 'new video is selected with its toolbar');
+  const ready = await page.waitForFunction(() => document.querySelector('#editor figure.cs-videofile video').readyState >= 1, null, { timeout: 10000 }).then(() => true, () => false);
+  check(ready, 'the video loads in the editor from the post folder (range requests)');
+  await page.click('#imgbar [data-img="details"]');
+  await page.waitForSelector('#modalBack:not([hidden]) textarea');
+  await page.fill('#modalBack textarea', 'Water Users at dusk');
+  await page.click('#modalBack button.primary');
+  await page.click('#imgbar [data-w="50"]');
+  h = await html();
+  check(/<figure class="wp-block-video aligncenter" style="width: ?50%;?"><video [^>]+><\/video><figcaption class="wp-element-caption">Water Users at dusk<\/figcaption><\/figure>/.test(h), 'size and caption on a video file', h.split('\n').find(l => l.includes('wp-block-video')));
+  await page.keyboard.press('Escape');
+  await click('#editor figure.cs-videofile .cs-video-handle');
+  check(await page.evaluate(() => !$('#imgbar').hidden), 'clicking the label above a video selects it');
+  await page.keyboard.press('Escape');
+
+  // an iPhone HEVC video: warned first; Cancel adds nothing, "Add it anyway" adds it
+  await page.setInputFiles('#videoPick', path.join(FIX, 'phone.mov'));
+  await page.waitForSelector('#modalBack:not([hidden])', { timeout: 20000 });
+  check(/HEVC/.test(await page.evaluate(() => $('#modalBack').innerText)) && /Most Compatible/.test(await page.evaluate(() => $('#modalBack').innerText)), 'HEVC video gets a warning with how to fix it');
+  await page.click('#modalBack button:not(.primary)');
+  await page.waitForTimeout(300);
+  check(await vidCount() === 1 && !fs.existsSync(path.join(vdir, 'phone.mov')), 'Cancel adds nothing');
+  await page.setInputFiles('#videoPick', path.join(FIX, 'phone.mov'));
+  await page.waitForSelector('#modalBack:not([hidden])', { timeout: 20000 });
+  await page.click('#modalBack button.primary');
+  await page.waitForFunction(() => document.querySelectorAll('#editor figure.cs-videofile').length === 2, null, { timeout: 20000 });
+  check(fs.existsSync(path.join(vdir, 'phone.mov')), '"Add it anyway" adds it');
+  await page.keyboard.press('Escape');
+
+  // a big file arrives in several pieces and comes out identical
+  const big = path.join(posts, 'big.webm');
+  fs.writeFileSync(big, Buffer.alloc(19 * 1024 * 1024 + 123, 7));
+  await page.setInputFiles('#videoPick', big);
+  await page.waitForSelector('#modalBack:not([hidden])', { timeout: 20000 });
+  check(/couldn't play/.test(await page.evaluate(() => $('#modalBack').innerText)), 'a video that won\'t play gets a warning');
+  await page.click('#modalBack button.primary');
+  await page.waitForFunction(() => document.querySelectorAll('#editor figure.cs-videofile').length === 3, null, { timeout: 30000 });
+  check(fs.statSync(path.join(vdir, 'big.webm')).size === fs.statSync(big).size, 'a 19 MB video is sent in pieces and arrives whole');
+  check(fs.readdirSync(vdir).every(f => !f.endsWith('.part')), 'no half-added files are left behind');
+  await page.keyboard.press('Escape');
+
+  const before = await html();
+  await page.evaluate(() => ed.setHTML(currentHtml()));
+  check(await html() === before, 'video files survive saving and reopening unchanged');
+  check(!before.includes('/files/'), 'no screen-only video addresses in the HTML');
+  const doc = await page.evaluate(async () => {
+    const blob = await window.buildDocx({ title: 'T', html: currentHtml(), font: 'Georgia', resolveSrc: s => /^images\//.test(s) ? fileUrl(s) : s });
+    return new TextDecoder().decode(new Uint8Array(await blob.arrayBuffer()));
+  });
+  check(doc.includes('[Video: clip.mp4]') && doc.includes('Water Users at dusk'), 'Word export notes the video file and its caption');
+  check(/5 videos/.test(await page.evaluate(() => $('#wordCount').textContent)), 'word count includes video files', await page.evaluate(() => $('#wordCount').textContent));
+  // remove the test videos again so later checks see the post as before
+  for (let i = 0; i < 3; i++) {
+    await click('#editor figure.cs-videofile .cs-video-handle');
+    await page.click('#imgbar [data-img="delete"]');
+  }
+  check(await vidCount() === 0, 'videos can be removed');
+  await flush();
+}
+
 console.log('Pasting from Word / web');
 {
   await click('#editor h2');

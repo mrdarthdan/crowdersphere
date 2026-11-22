@@ -1,7 +1,7 @@
 /* CrowderSphere bridge: lets the editor talk to whichever back end it is running on.
  *
  *  - Desktop app (Tauri): calls the Rust commands in src-tauri through Tauri's IPC, and loads
- *    pictures through the private csfiles: protocol.
+ *    pictures and videos through the private csfiles: protocol.
  *  - In a normal browser (dev/mock-server.mjs, used for development and the browser test):
  *    calls the stand-in server's /api/... routes.
  *
@@ -19,14 +19,14 @@
   function fileUrl(postId, rel) { return filesRoot + encodeURIComponent(postId) + '/' + rel; }
   function filesBase(postId) { return (tauri ? filesRoot : location.origin + filesRoot) + encodeURIComponent(postId || '_') + '/'; }
 
-  // Turn a displayed picture address back into the post-relative path stored in post.html ("images/x.jpg")
+  // Turn a displayed picture or video address back into the post-relative path stored in post.html ("images/x.jpg")
   function relFromUrl(src) {
     if (!src) return null;
     if (src.startsWith(filesRoot)) {
-      const m = src.slice(filesRoot.length).match(/^[^/]+\/(images\/[^?#]+)$/);
+      const m = src.slice(filesRoot.length).match(/^[^/]+\/((?:images|videos)\/[^?#]+)$/);
       return m ? decodeURIComponent(m[1]) : null;
     }
-    const m = src.match(/^\/files\/[^/]+\/(images\/[^?#]+)$/);
+    const m = src.match(/^\/files\/[^/]+\/((?:images|videos)\/[^?#]+)$/);
     return m ? decodeURIComponent(m[1]) : null;
   }
 
@@ -43,9 +43,12 @@
     const url = new URL(path, 'http://app.invalid');
     const q = url.searchParams;
     const json = opts.json;
-    const raw = async (cmd) => invoke(cmd, await bytesOf(opts.body), {
-      headers: { 'x-id': encodeURIComponent(q.get('id') || ''), 'x-name': encodeURIComponent(q.get('name') || '') }
-    });
+    // raw file data in the body; the query (?id=...&name=...) goes along as x-id, x-name... headers
+    const raw = async (cmd) => {
+      const headers = { 'x-id': '', 'x-name': '' };
+      for (const [k, v] of q) headers['x-' + k] = encodeURIComponent(v);
+      return invoke(cmd, await bytesOf(opts.body), { headers });
+    };
     switch (url.pathname) {
       case '/api/settings':       return json !== undefined ? invoke('save_settings', { body: json }) : invoke('get_settings');
       case '/api/test':           return invoke('test_connection');
@@ -53,6 +56,8 @@
       case '/api/post':           return json !== undefined ? invoke('save_post', { body: json }) : invoke('get_post', { id: q.get('id') || '' });
       case '/api/delete':         return invoke('delete_post', { id: q.get('id') || '' });
       case '/api/image':          return raw('save_image');
+      case '/api/video-chunk':    return raw('save_video_chunk');
+      case '/api/video-discard':  return invoke('discard_video', { id: q.get('id') || '', upload: q.get('upload') || '' });
       case '/api/export':         return raw('export_docx');
       case '/api/openfile':       return invoke('open_export', { id: q.get('id') || '', name: q.get('name') || '' });
       case '/api/categories':     return json !== undefined ? invoke('add_category', { name: String(json.name || '') }) : invoke('get_categories');
@@ -112,6 +117,13 @@
     finally { if (unlisten) unlisten(); }
   }
 
+  // Desktop app: how far along a video upload is while a post is sent. cb({file, done, total});
+  // returns a function that stops listening.
+  async function onPublishProgress(cb) {
+    if (!tauri || !T.event) return () => {};
+    return T.event.listen('cs-publish-progress', ev => cb(ev.payload || {}));
+  }
+
   // Desktop app: the window asks the editor to save before it closes
   function onCloseRequested(save) {
     if (!tauri || !T.event) return;
@@ -121,5 +133,5 @@
     });
   }
 
-  window.CS = { tauri, api, fileUrl, filesBase, relFromUrl, onCloseRequested, remoteImage, checkUpdate, installUpdate };
+  window.CS = { tauri, api, fileUrl, filesBase, relFromUrl, onCloseRequested, onPublishProgress, remoteImage, checkUpdate, installUpdate };
 })();

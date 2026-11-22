@@ -26,6 +26,7 @@
         "style-src": "'self' 'unsafe-inline'",
         "img-src": "'self' data: blob: https: http: csfiles: http://csfiles.localhost",
         "font-src": "'self' data:",
+        "media-src": "'self' blob: csfiles: http://csfiles.localhost",
         "connect-src": "'self' ipc: http://ipc.localhost csfiles: http://csfiles.localhost https: data: blob:",
         "frame-src": "'self' about: blob: data:"
       },
