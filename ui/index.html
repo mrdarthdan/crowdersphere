@@ -123,6 +123,11 @@ label.field>span{display:block;font-size:12px;font-weight:600;color:var(--muted)
 #editor figure.alignnone{clear:both}
 #editor figure:hover{outline:2px dashed #b9c6ee;outline-offset:3px}
 #editor figure.is-selected{outline:3px solid var(--accent);outline-offset:3px}
+#editor figure.cs-embed .cs-video-card{position:relative;aspect-ratio:16/9;background:#111 center/cover no-repeat;border-radius:4px;overflow:hidden}
+#editor figure.cs-embed .cs-video-card.vertical{aspect-ratio:9/16;max-height:520px;margin:0 auto}
+#editor .cs-play{position:absolute;left:50%;top:50%;width:68px;height:48px;margin:-24px 0 0 -34px;background:rgba(0,0,0,.7);border-radius:12px}
+#editor .cs-play::after{content:"";position:absolute;left:27px;top:14px;border-style:solid;border-width:10px 0 10px 18px;border-color:transparent transparent transparent #fff}
+#editor .cs-video-label{position:absolute;left:0;right:0;bottom:0;padding:6px 10px;background:linear-gradient(transparent,rgba(0,0,0,.75));color:#fff;font:12px "Segoe UI",sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #editor figure.is-featured::before{content:"\2605 Featured";position:absolute;top:8px;left:8px;background:rgba(0,0,0,.65);color:#fff;font:600 11px "Segoe UI",sans-serif;padding:2px 8px;border-radius:99px;z-index:1}
 
 #statusbar{display:flex;justify-content:space-between;gap:12px;padding:5px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);background:var(--panel)}
@@ -240,6 +245,7 @@ ol.steps{padding-left:20px;margin:6px 0;font-size:13px;color:var(--muted)}
     <symbol id="i-ac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="10" x2="17" y2="10"/><line x1="4" y1="14" x2="20" y2="14"/><line x1="7" y1="18" x2="17" y2="18"/></symbol>
     <symbol id="i-ar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="10" y1="10" x2="20" y2="10"/><line x1="4" y1="14" x2="20" y2="14"/><line x1="10" y1="18" x2="20" y2="18"/></symbol>
     <symbol id="i-img" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></symbol>
+    <symbol id="i-video" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="15" height="14" rx="2"/><path d="M17 10l5-3v10l-5-3z"/></symbol>
     <symbol id="i-hr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="7" y1="7" x2="17" y2="7" opacity=".35"/><line x1="7" y1="17" x2="17" y2="17" opacity=".35"/></symbol>
     <symbol id="i-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
     <symbol id="i-redo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></symbol>
@@ -312,6 +318,7 @@ ol.steps{padding-left:20px;margin:6px 0;font-size:13px;color:var(--muted)}
       <button data-act="link" title="Insert link (Ctrl+K)"><svg><use href="#i-link"/></svg></button>
       <button data-cmd="unlink" title="Remove link"><svg><use href="#i-unlink"/></svg></button>
       <button data-act="image" title="Insert picture"><svg><use href="#i-img"/></svg></button>
+      <button data-act="video" title="Insert video (YouTube or Vimeo link)"><svg><use href="#i-video"/></svg></button>
       <button data-act="hr" title="Divider line"><svg><use href="#i-hr"/></svg></button>
       <span class="sep"></span>
       <button data-cmd="removeFormat" title="Clear formatting"><svg><use href="#i-clear"/></svg></button>
@@ -709,8 +716,15 @@ function editorText() {
 function plural(n, w) { return `${n.toLocaleString()} ${w}${n === 1 ? '' : 's'}`; }
 function updateWordCount() {
   const st = textStats(editorText());
-  const imgs = state.sourceMode ? (source.value.match(/<img/g) || []).length : $$('img', editor).length;
-  $('#wordCount').textContent = `${plural(st.words, 'word')}  ·  ${plural(st.chars, 'character')}  ·  ${plural(imgs, 'picture')}  ·  ~${Math.max(1, Math.round(st.words / 230))} min read`;
+  const { imgs, videos } = mediaCounts();
+  $('#wordCount').textContent = `${plural(st.words, 'word')}  ·  ${plural(st.chars, 'character')}  ·  ${plural(imgs, 'picture')}${videos ? '  ·  ' + plural(videos, 'video') : ''}  ·  ~${Math.max(1, Math.round(st.words / 230))} min read`;
+}
+function mediaCounts() {
+  if (state.sourceMode) {
+    const h = source.value;
+    return { imgs: (h.match(/<img\b/g) || []).length, videos: (h.match(/<video\b|class="wp-block-embed\b[^"]*is-type-video/g) || []).length };
+  }
+  return { imgs: $$('img', editor).length, videos: $$('video, figure.cs-embed', editor).length };
 }
 function updateSelCount() {
   const txt = state.sourceMode ? '' : ed.selectedText();
@@ -725,14 +739,14 @@ $('#wordCount').addEventListener('click', () => {
   const paras = $$('p,li', holder).filter(p => p.textContent.trim()).length;
   const sentences = (text.match(/[^.!?\n]+[.!?]+(\s|$)/g) || []).length || (st.words ? 1 : 0);
   const headings = $$('h1,h2,h3,h4,h5,h6', holder).length;
-  const imgs = $$('img', holder).length, links = $$('a[href]', holder).length;
+  const { imgs, videos } = mediaCounts(), links = $$('a[href]', holder).length;
   const m = state.current.meta;
   const tl = (m.title || '').length, el = (m.excerpt || '').length;
   const mins = n => n < 1 ? 'under 1 min' : `${Math.round(n)} min`;
   const rows = [
     ['Words', st.words], ['Characters (with spaces)', st.chars], ['Characters (no spaces)', st.noSpaces],
     ['Paragraphs', paras], ['Sentences', sentences], ['Average words per sentence', sentences ? (st.words / sentences).toFixed(1) : '0'],
-    ['Headings', headings], ['Pictures', imgs], ['Links', links],
+    ['Headings', headings], ['Pictures', imgs], ['Videos', videos], ['Links', links],
     ['Reading time (230 words/min)', mins(st.words / 230)], ['Read-aloud time (130 words/min)', mins(st.words / 130)],
     ['Title length', `${tl} characters${tl > 60 ? ' (search results show ~60)' : ''}`],
     ['Excerpt length', `${el} characters${el > 160 ? ' (search results show ~160)' : ''}`]
@@ -789,6 +803,7 @@ $('#toolbar').addEventListener('click', e => {
   if (act === 'quote') ed.chain().toggleBlockquote().run();
   if (act === 'link') insertLink();
   if (act === 'image') $('#filePick').click();
+  if (act === 'video') insertVideo();
   if (act === 'hr') ed.chain().setHorizontalRule().run();
   if (act === 'source') toggleSource(!state.sourceMode);
   if (act === 'spell') { savePrefs({ spellcheck: !prefs.spellcheck }); toast(prefs.spellcheck ? 'Spell check on. Right-click an underlined word for suggestions.' : 'Spell check off.'); }
@@ -951,6 +966,28 @@ async function insertImages(files, pos) {
   if (!count) setSaveState(state.dirty ? 'Editing...' : 'Saved');
 }
 
+/* ------------------------------------------------------------------ videos */
+// A YouTube/Vimeo link: the video stays on that site and WordPress shows its player.
+function insertVideo() {
+  if (!state.current) return;
+  if (state.sourceMode) { toast('Switch out of HTML view to add videos.'); return; }
+  const pos = ed.tiptap.state.selection.from;
+  const body = `<label class="field"><span>YouTube or Vimeo link</span><input type="text" id="vidUrl" placeholder="https://www.youtube.com/watch?v=...">
+      <div class="hint">The video stays on YouTube or Vimeo, and WordPress shows its player in the post. TikTok and Dailymotion links work too.<br>Tip: pasting a video link on an empty line adds it straight away.</div></label>
+    <div id="vidErr" class="result-bad"></div>`;
+  const m = openModal({ title: 'Add a video', body, buttons: [
+    { label: 'Cancel' },
+    { label: 'Add video', primary: true, action: el => {
+      const v = $('#vidUrl', el).value.trim();
+      const site = v && CSE.videoSite(v);
+      if (!site) { $('#vidErr', el).textContent = v ? 'That isn\'t a YouTube, Vimeo, TikTok or Dailymotion video link.' : 'Paste the video\'s link first.'; return false; }
+      ed.insertVideoEmbed(site.url, pos);
+      return true;
+    } }
+  ] });
+  $('#vidUrl', m.el).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('footer button.primary', m.el).click(); } });
+}
+
 function figRel(fig) { return (fig && fig.dataset && fig.dataset.rel) || ''; }
 function markFeatured() { ed.refreshFigures(); }
 // The picture toolbar follows the editor's selection: clicking a picture selects it.
@@ -964,8 +1001,13 @@ function syncFigSelection() {
 function selectFig(fig) { ed.selectFigureDom(fig); }
 function deselectFig() { ed.deselect(); state.selFig = null; $('#imgbar').hidden = true; }
 function figAttrs() { const f = ed.selectedFigure(); return f ? f.node.attrs : null; }
+function figKind() { const f = ed.selectedFigure(); return f ? f.node.type.name : ''; }
 function syncImgbar() {
   const a = figAttrs(); if (!a) return;
+  const kind = figKind(), pic = kind === 'figure';
+  $('#imgbar [data-img="featured"]').style.display = pic ? '' : 'none';
+  $('#imgbar [data-img="details"]').textContent = pic ? 'Caption / alt' : kind === 'videoEmbed' ? 'Link / caption' : 'Caption';
+  $('#imgbar [data-img="delete"]').title = pic ? 'Remove picture' : 'Remove video';
   for (const b of $$('#imgbar [data-img^="align"]')) b.classList.toggle('on', b.dataset.img === a.align);
   for (const b of $$('#imgbar [data-w]')) b.classList.toggle('on', +b.dataset.w === a.width);
   $('#imgWidth').value = a.width; $('#imgWidthLabel').textContent = a.width + '%';
@@ -999,6 +1041,19 @@ async function figAction(act) {
     const upd = { align: act };
     if ((act === 'alignleft' || act === 'alignright') && a.width > 60) upd.width = 45;
     ed.updateFigure(upd);
+  } else if (act === 'details' && figKind() === 'videoEmbed') {
+    const res = await ask('Video details', [
+      { label: 'YouTube or Vimeo link', value: a.url || '' },
+      { label: 'Caption (shown under the video)', value: a.caption || '', multiline: true }
+    ], 'Save');
+    if (!res) return;
+    const site = CSE.videoSite(res[0]);
+    if (!site) { toast('That isn\'t a YouTube, Vimeo, TikTok or Dailymotion video link. The link was not changed.', 'error'); }
+    ed.updateFigure({ url: site ? site.url : a.url, caption: res[1].trim() });
+  } else if (act === 'details' && figKind() === 'videoFile') {
+    const res = await ask('Video details', [{ label: 'Caption (shown under the video)', value: a.caption || '', multiline: true }], 'Save');
+    if (!res) return;
+    ed.updateFigure({ caption: res[0].trim() });
   } else if (act === 'details') {
     const res = await ask('Picture details', [
       { label: 'Alt text (describes the picture for screen readers and search engines)', value: a.alt || '' },
@@ -1146,6 +1201,21 @@ $('#deletePost').addEventListener('click', () => {
 });
 
 /* ------------------------------------------------------------------ preview */
+// WordPress shows YouTube/Vimeo players itself; the preview shows the video's picture instead
+function previewBody() {
+  const t = document.createElement('template');
+  t.innerHTML = currentHtml();
+  for (const fig of t.content.querySelectorAll('figure.wp-block-embed')) {
+    const wrap = fig.querySelector('.wp-block-embed__wrapper'), site = wrap && CSE.videoSite(wrap.textContent);
+    if (!site) continue;
+    const card = document.createElement('div');
+    card.className = 'cs-video-card' + (site.vertical ? ' vertical' : '');
+    if (site.slug === 'youtube') card.style.backgroundImage = `url("https://i.ytimg.com/vi/${site.id}/hqdefault.jpg")`;
+    card.innerHTML = `<span>${esc(site.name)} video &middot; ${esc(site.url)}</span>`;
+    wrap.replaceWith(card);
+  }
+  return t.innerHTML;
+}
 function previewDoc() {
   const base = CS.filesBase(state.current.id);
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><base href="${esc(base)}"><style>
@@ -1157,7 +1227,12 @@ function previewDoc() {
     pre{background:#f5f5f3;padding:12px;border-radius:6px;white-space:pre-wrap} a{color:#2f5bd3} hr{border:none;border-top:2px solid #ddd;margin:2em 0}
     article::after{content:"";display:block;clear:both}
     .featured-hero{width:100%;border-radius:4px;margin:0 0 1.2em}
-  </style></head><body><article><h1>${esc(state.current.meta.title || 'Untitled')}</h1>${state.current.meta.featured ? `<img class="featured-hero" src="${esc(state.current.meta.featured)}" alt="">` : ''}${currentHtml()}</article></body></html>`;
+    video{width:100%;height:auto;display:block;border-radius:2px}
+    .cs-video-card{position:relative;display:block;aspect-ratio:16/9;background:#111 center/cover no-repeat;border-radius:4px;color:#fff;text-decoration:none}
+    .cs-video-card.vertical{aspect-ratio:9/16;max-height:560px;margin:0 auto}
+    .cs-video-card span{position:absolute;left:0;right:0;bottom:0;padding:8px 12px;background:linear-gradient(transparent,rgba(0,0,0,.8));font:13px "Segoe UI",sans-serif}
+    .cs-video-card::before{content:"\u25B6";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.7);border-radius:12px;padding:8px 22px;font-size:24px}
+  </style></head><body><article><h1>${esc(state.current.meta.title || 'Untitled')}</h1>${state.current.meta.featured ? `<img class="featured-hero" src="${esc(state.current.meta.featured)}" alt="">` : ''}${previewBody()}</article></body></html>`;
 }
 $('#previewBtn').addEventListener('click', () => {
   const frame = document.createElement('iframe');
@@ -1208,7 +1283,7 @@ $('#publishBtn').addEventListener('click', async () => {
   const m = state.current.meta;
   const html = currentHtml();
   const nImgs = (html.match(/src="(\/files\/[^"]+|images\/[^"]+)"/g) || []).length;
-  const missingAlt = $$('figure img', editor).filter(i => !i.alt).length;
+  const missingAlt = $$('figure.wp-block-image img', editor).filter(i => !i.alt).length;
   const checks = [];
   if (!m.title.trim()) checks.push('<li class="warn">&#9888; The post needs a title.</li>');
   if (!hasContent(html)) checks.push('<li class="warn">&#9888; The post is empty.</li>');
