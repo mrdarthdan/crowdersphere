@@ -127,12 +127,12 @@ Releases are built by GitHub Actions from tagged commits (`.github/workflows/rel
 
 Windows releases are signed so that Windows can confirm they come from this project and haven't been altered.
 
-Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+Windows installers are signed with [Azure Artifact Signing](https://azure.microsoft.com/products/artifact-signing), with Daniel Crowder as the verified publisher.
 
 - **Committers and reviewers:** [Daniel Crowder](https://github.com/mrdarthdan)
-- **Approvers:** [Daniel Crowder](https://github.com/mrdarthdan)
+- **Release approver:** [Daniel Crowder](https://github.com/mrdarthdan)
 
-Only installers built by this repository's GitHub Actions release workflow from its public source code are signed, and each signing request is approved by hand. Contributions from other people are reviewed before they are merged.
+Only installers built by this repository's GitHub Actions release workflow from its public source code are signed, and each release is checked by hand before it is published. Contributions from other people are reviewed before they are merged.
 
 ## Privacy
 

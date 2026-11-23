@@ -4,7 +4,9 @@ Unsigned installers work, but Windows shows "Windows protected your PC" and macO
 
 ## Windows: pick one
 
-### Option A: SignPath Foundation (free, for open-source projects) — chosen
+### Option A: SignPath Foundation (free, for open-source projects)
+
+*Applied November 2026 and turned down for now, because the project doesn't have a userbase yet. Worth applying again once it does. Until then, Option B is in use.*
 
 SignPath Foundation issues the certificate and signs the installers that GitHub Actions builds from this public repository. The installer's publisher shows as "SignPath Foundation". The repository is already set up for their rules: an OSI license (MIT), a [code signing policy](README.md#code-signing-policy) and [privacy statement](README.md#privacy) on the home page, release notes that link to both, builds from tagged commits with `Cargo.lock` pinned, and an uninstaller.
 
@@ -26,17 +28,26 @@ SignPath Foundation issues the certificate and signs the installers that GitHub 
 
 **5. Each release after that:** push the tag as usual. The Windows build waits (up to an hour) for you to approve the signing request in SignPath, then swaps the signed installer into the draft release. Publish the release once it's there.
 
-### Option B: Azure Artifact Signing (paid, publisher shows your name)
+### Option B: Azure Artifact Signing (paid, publisher shows your name) — chosen
 
-Microsoft's signing service, formerly called Trusted Signing. It costs a monthly fee (Basic tier, check current Azure pricing). Individual developers in the US and Canada can verify their identity, and the installer then shows your own name as the publisher.
+Microsoft's signing service, formerly called Trusted Signing. The Basic tier is $9.99 a month for up to 5,000 signatures, far more than releases need. Individual developers in the US and Canada can verify their identity, and the installer then shows your own name as the publisher. One account can sign all your Windows apps.
 
-1. In the Azure portal, create an Artifact Signing account, complete identity validation, and create a **Public Trust** certificate profile.
-2. Create an app registration (service principal) and give it the *Artifact Signing Certificate Profile Signer* role on the account.
-3. Add these GitHub secrets:
+1. **Azure subscription.** Sign in at <https://portal.azure.com> with your Microsoft account. Artifact Signing doesn't work on free, trial or sponsored subscriptions, so use (or upgrade to) a **pay-as-you-go** subscription. For individual validation the billing account type must be *Individual*.
+2. **Register the service.** Subscriptions → your subscription → Resource providers → find `Microsoft.CodeSigning` → Register.
+3. **Create the signing account.** Create a resource → search "Artifact Signing" → Create. Pick a resource group (e.g. `crowdersphere-signing`), a name (e.g. `crowdersphere`), a region (e.g. West US 2), and the **Basic** pricing tier. The region decides the endpoint: West US 2 is `https://wus2.codesigning.azure.net`, East US is `https://eus.codesigning.azure.net` (shown on the account's Overview page as *Account URI*).
+4. **Give yourself the role.** On the account: Access control (IAM) → Add role assignment → *Artifact Signing Identity Verifier* → your own user. Without it, the identity validation page is greyed out.
+5. **Verify your identity.** On the account: Identity validations → New identity → **Public** → **Individual**. You'll confirm your details and complete a photo ID plus selfie check with Microsoft Authenticator (Entra Verified ID). Approval usually takes from a few hours to a few days.
+6. **Create the certificate profile.** Once validation shows *Completed*: Certificate profiles → Create → **Public Trust**, pick the validated identity, name it (e.g. `crowdersphere-public`).
+7. **Create the app GitHub signs with.** Microsoft Entra ID → App registrations → New registration (name e.g. `crowdersphere-github-signing`, defaults otherwise). Note its *Application (client) ID* and *Directory (tenant) ID*. Then Certificates & secrets → New client secret (24 months) and copy the **Value** right away; it's only shown once. Put a reminder on your calendar to renew it before it expires.
+8. **Let that app sign.** Back on the signing account: Access control (IAM) → Add role assignment → *Artifact Signing Certificate Profile Signer* → select the app registration.
+9. Add these GitHub secrets:
    - `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`: from the app registration
    - `AZURE_SIGNING_ENDPOINT`: for example `https://wus2.codesigning.azure.net`
    - `AZURE_SIGNING_ACCOUNT`: the signing account name
    - `AZURE_SIGNING_PROFILE`: the certificate profile name
+10. **Test it:** run the **Release** workflow from the Actions tab (or push the next version tag). In the Windows job, the *Set up Azure Artifact Signing* step should run instead of being skipped. Download the installer from the draft release, right-click → Properties → Digital Signatures, and check your name is listed.
+
+Newly signed apps can still get a SmartScreen warning for the first few weeks, until enough people have downloaded them; signing builds that reputation under your name.
 
 If both are configured, Azure is used.
 
